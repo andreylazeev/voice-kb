@@ -76,7 +76,7 @@
     <string name="settings_dictation_language">Язык диктовки</string>
     <string name="dictation_language_automatic_detail">По раскладке или языку телефона</string>
     <string name="settings_clean">Очистка диктовки</string>
-    <string name="settings_clean_detail">Убирает явные запинки и случайные повторы</string>
+    <string name="settings_clean_detail">Перед вставкой убирает запинки, случайные повторы и слова-паразиты по контексту</string>
     <string name="settings_keyboard_layout">Раскладка</string>
     <string name="settings_layout_follows">По языку диктовки · %1$s</string>
     <string name="settings_layout_automatic_detail">По языку диктовки</string>

@@ -22,46 +22,12 @@ internal object SpokenText {
         if (options.style == Style.Verbatim) return raw.trim()
         val language = options.spoken.code
         val spelled = VocabularySpelling.apply(options.vocabulary, raw)
-        val cleaned = if (options.clean) lightCleanup(spelled, language) else spelled
+        val cleaned = if (options.clean) DictationCleanup.clean(spelled, language) else spelled
         val normalized = capitalizeSentenceStarts(fixSpacing(collapse(cleaned)))
         val lines = normalized.split('\n')
         val punctuated = if (options.endWithPeriod) lines.joinToString("\n", transform = ::endingSentence)
             else lines.joinToString("\n", transform = ::droppingFinalFullStop)
         return finished(punctuated, options)
-    }
-
-    private fun lightCleanup(text: String, language: String): String {
-        val hesitation = if (language == "en") "um+|uh+|erm+|u+h+m*"
-            else "э+(?:[-‑–]э+)+|э{2,}|эм+|м{2,}"
-        val repeat = Regex("""(?iu)(?<![\p{L}\p{N}])(\p{L}{3,})[ \t]+\1(?![\p{L}\p{N}])""")
-        val emphatic = setOf("очень", "еле", "точно", "нет", "не", "ні", "дуже", "no", "not", "yes", "really", "very")
-        // Keep quoted speech intact, including spellings and intentionally repeated words.
-        val original = text
-        return buildString {
-            var start = 0
-            var closing: Char? = null
-            for ((i, ch) in original.withIndex()) {
-                if (closing == null && ch in "\"«“") {
-                    append(cleanSegment(original.substring(start, i), hesitation, repeat, emphatic))
-                    start = i
-                    closing = when (ch) { '«' -> '»'; '“' -> '”'; else -> '"' }
-                } else if (ch == closing) {
-                    append(original.substring(start, i + 1))
-                    start = i + 1
-                    closing = null
-                }
-            }
-            append(if (closing == null) cleanSegment(original.substring(start), hesitation, repeat, emphatic)
-                else original.substring(start))
-        }
-    }
-
-    private fun cleanSegment(text: String, hesitation: String, repeat: Regex, emphatic: Set<String>): String {
-        val pauses = Regex("""(?iu)(?<![\p{L}\p{N}])(?:$hesitation)(?![\p{L}\p{N}]),?[ \t]*""")
-        return repeat.replace(pauses.replace(text, "")) { match ->
-            val word = match.groupValues[1]
-            if (word.lowercase(Locale.ROOT) in emphatic) match.value else word
-        }
     }
 
     private fun finished(styled: String, options: SpeechOptions): String {
