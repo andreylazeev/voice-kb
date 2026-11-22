@@ -133,6 +133,7 @@ internal class KeyboardView(context: Context, private val ime: HexKeyboard) : Li
     }
 
     override fun showPage(page: KeyboardPage) {
+        strip.setIncognito(page.incognito)
         keys.showPage(page)
         // What TalkBack names the keyboard as it appears, as Gboard's "English (US) (QWERTY)".
         val title = context.getString(R.string.keyboard_pane, page.language.label)

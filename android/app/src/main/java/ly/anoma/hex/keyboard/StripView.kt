@@ -46,8 +46,15 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
     private val hexWidth = px(KeyboardMetrics.HEX_KEY)
     private val pill = px(KeyboardMetrics.PILL)
     private val cancelWidth = dp(40)
+    private val incognitoWidth = dp(28)
+    private val wellStart = side + px(KeyboardMetrics.GAP / 2)
 
     private val idleRow = LinearLayout(context)
+    private val incognitoIcon = icon(R.drawable.ic_incognito).apply {
+        contentDescription = context.getString(R.string.keyboard_incognito)
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+        visibility = GONE
+    }
     private val statusText = TextView(context)
     private val slotRow = LinearLayout(context)
     private val slotViews = List(3) { FrameLayout(context) }
@@ -154,9 +161,11 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
         // a pane title would stay behind as the keyboard window's name).
         scope.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         scope.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-        val wellStart = side + px(KeyboardMetrics.GAP / 2)
         addView(well, LayoutParams(-1, pill, Gravity.CENTER_VERTICAL).apply {
             marginStart = wellStart; marginEnd = side + hexWidth + cancelWidth - (cancelWidth - pill) / 2 + dp(6)
+        })
+        addView(incognitoIcon, LayoutParams(dp(22), dp(22), Gravity.START or Gravity.CENTER_VERTICAL).apply {
+            marginStart = side + dp(3)
         })
 
         cancelKey.apply {
@@ -184,6 +193,14 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
         }
         addView(hexKey, LayoutParams(hexWidth, -1, Gravity.END).apply { marginEnd = side })
         showIdle(true)
+    }
+
+    fun setIncognito(enabled: Boolean) {
+        if ((incognitoIcon.visibility == VISIBLE) == enabled) return
+        incognitoIcon.visibility = if (enabled) VISIBLE else GONE
+        val offset = if (enabled) incognitoWidth else 0
+        idleRow.layoutParams = (idleRow.layoutParams as LayoutParams).apply { marginStart = side + offset }
+        well.layoutParams = (well.layoutParams as LayoutParams).apply { marginStart = wellStart + offset }
     }
 
     fun setFloating(enabled: Boolean) {

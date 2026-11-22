@@ -46,7 +46,7 @@ internal data class SpeechOptions(val style: Style, val spoken: DictationLanguag
                                    val lowercase: Boolean = false, val endWithPeriod: Boolean = true,
                                    val formatLists: Boolean = false, val spokenPunctuation: Boolean = false,
                                    val vocabulary: List<String> = emptyList(),
-                                   val cleanupModel: CleanupModel? = null)
+                                   val cleanupModel: CleanupModel? = null, val incognito: Boolean = false)
 internal class SpeechPreferences(context: Context) {
     private val app = context.applicationContext
     private val prefs = context.getSharedPreferences("speech", Context.MODE_PRIVATE)
@@ -94,10 +94,10 @@ internal class SpeechPreferences(context: Context) {
     var cleanupModel: CleanupModel?
         get() = prefs.getString("cleanupModel", null)?.let { id -> CleanupModel.entries.firstOrNull { it.name == id } }
         set(value) { prefs.edit().putString("cleanupModel", value?.name).apply() }
-    fun options(nextEnglish: Boolean?): SpeechOptions {
+    fun options(nextEnglish: Boolean?, incognito: Boolean = false): SpeechOptions {
         val selected = style
         return SpeechOptions(selected, spoken, selected != Style.Verbatim, false, lowercase, endWithPeriod,
-            formatLists, spokenPunctuation, if (customVocabulary) vocabularyTerms else emptyList(),
-            cleanupModel?.takeIf { selected != Style.Verbatim && CleanupModels.ready(app, it) })
+            formatLists, spokenPunctuation, if (!incognito && customVocabulary) vocabularyTerms else emptyList(),
+            cleanupModel?.takeIf { selected != Style.Verbatim && CleanupModels.ready(app, it) }, incognito)
     }
 }

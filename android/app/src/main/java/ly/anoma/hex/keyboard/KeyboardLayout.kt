@@ -42,6 +42,7 @@ internal data class KeyboardPage(
     val enter: EnterKey,
     val kind: FieldKind = FieldKind.Text,
     val pad: Pad? = null,
+    val incognito: Boolean = false,
 ) {
     val lines: List<String> get() {
         val code = language.layoutCode

@@ -4,4 +4,4 @@ VoiceKB processes microphone audio and typed text on the phone. It uses the inte
 
 Keyboard personalisation
 
-VoiceKB can keep a small vocabulary and counts from the words and suggestions you accept. It stores them on the phone, separated by language and input mode. Password fields and fields that request private input are excluded. Open Keyboard → Personalisation to turn off individual features or clear the learned data.
+VoiceKB can keep a small vocabulary and counts from the words and suggestions you accept. It stores them on the phone, separated by language and input mode. Password fields are excluded from learning. When an app requests input without personalisation, VoiceKB shows an incognito icon and disables learning, the personal dictionary, and emoji history. Incognito dictation interrupted by a field change is discarded. Open Keyboard → Personalisation to turn off individual features or clear the learned data.

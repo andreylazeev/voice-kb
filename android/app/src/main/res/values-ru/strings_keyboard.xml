@@ -1,6 +1,7 @@
 <resources>
     <string name="keyboard_undo_dictation">Отменить вставку диктовки</string>
     <string name="keyboard_pane">Клавиатура VoiceKB, %1$s</string>
+    <string name="keyboard_incognito">Режим инкогнито</string>
     <string name="keyboard_shift_on">Верхний регистр включён</string>
     <string name="keyboard_caps_lock_on">Верхний регистр закреплён</string>
     <string name="keyboard_more_characters">Показать другие символы</string>

@@ -80,10 +80,10 @@ class HexKeyboard : InputMethodService() {
     }
     private data class Draft(val text: String, val language: String, val literal: Boolean)
     private var draft: Draft? = null
-    private fun updateDraft() = view?.showDraft(draft?.text?.takeIf { !engine.secure })
+    private fun updateDraft() = view?.showDraft(draft?.text?.takeUnless { engine.secure || engine.incognito })
     internal fun insertDraft() {
         val available = draft ?: return
-        if (currentInputConnection == null || engine.secure) return
+        if (currentInputConnection == null || engine.secure || engine.incognito) return
         if (engine.insertDictation(available.text, available.language, available.literal)) discardDraft()
     }
     internal fun discardDraft() { draft = null; updateDraft() }
@@ -127,9 +127,9 @@ class HexKeyboard : InputMethodService() {
         val revision = engine.swipeRevision()
         val anchor = engine.swipeAnchor()
         val previous = if (anchor.lastOrNull()?.isWhitespace() == true) TypingWord.currentToken(anchor.trimEnd()) else null
-        val learned = feedback.learned(language, LearningMode.Swipe)
-        val typed = if (feedback.learnSwipe) feedback.learned(language, LearningMode.Tap) else LearnedWords.Empty
-        val context = feedback.learnContext
+        val learned = engine.learnedWords(language, LearningMode.Swipe)
+        val typed = if (feedback.learnSwipe) engine.learnedWords(language, LearningMode.Tap) else LearnedWords.Empty
+        val context = engine.personalContextEnabled
         val swears = feedback.suggestSwearWords
         glideWorker.execute {
             val candidates = runCatching {
@@ -283,6 +283,7 @@ class HexKeyboard : InputMethodService() {
         nextEnglish = null
         capture.detachFromEditor()
         engine.startInput(attribute)
+        updateDraft()
     }
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
@@ -318,7 +319,7 @@ class HexKeyboard : InputMethodService() {
             return false
         }
         engine.clearForDictation()
-        capture.start(preferences.options(nextEnglish))
+        capture.start(preferences.options(nextEnglish, incognito = engine.incognito))
         nextEnglish = null
         return true
     }
@@ -335,6 +336,7 @@ class HexKeyboard : InputMethodService() {
         val language = options.spoken.code
         val literal = options.style == Style.Verbatim
         if (!detached && isInputViewShown && engine.insertDictation(text, language, literal)) return
+        if (options.incognito) return
         val previous = draft
         draft = Draft(if (previous == null) text else previous.text + " " + text, language, literal)
         updateDraft()

@@ -12,6 +12,7 @@ import ly.anoma.hex.speech.SpokenText
 import ly.anoma.hex.typing.KeyGrid
 import ly.anoma.hex.typing.KeyPoint
 import ly.anoma.hex.typing.LearningMode
+import ly.anoma.hex.typing.LearnedWords
 import ly.anoma.hex.typing.PersonalWords
 import ly.anoma.hex.typing.SpatialDecoder
 import ly.anoma.hex.typing.Suggestion
@@ -57,7 +58,7 @@ internal class KeyboardEngine(
     private data class Swiped(val candidates: List<String>, val inserted: String, val language: String, val previous: String?)
     private var swiped: Swiped? = null
     private var swipeCaret: String? = null
-    val canSwipe get() = ordinaryField && !symbols && target.connected && canEndWord()
+    val canSwipe get() = swipeField && !symbols && target.connected && canEndWord()
     fun swipeRevision() = swipeRevision
     fun insertSwipe(candidates: List<String>, revision: Int, surrounding: String,
                     language: String = layoutLanguage().layoutCode) {
@@ -84,6 +85,7 @@ internal class KeyboardEngine(
     fun swipeAnchor() = before()
     private var editor: EditorInfo? = null
     private var ordinaryField = false
+    private var swipeField = false
     private var prefix = ""
     private var expectedCaret = -1
     private data class Undo(val language: String, val original: String, val replacement: String)
@@ -104,6 +106,10 @@ internal class KeyboardEngine(
     private var heldAnchor: String? = null
     var secure = true
         private set
+    var incognito = false
+        private set
+    private val personalLearningAllowed get() = ordinaryField && !incognito
+    val personalContextEnabled get() = personalLearningAllowed && feedback.learnContext
     // Undo dictation, as iPhone Hex's: the dictation just inserted and the text after it then, offered
     // back until the next edit, 12 s, or the cursor leaving its end, so the chip never does nothing.
     private data class Dictated(val text: String, val after: String)
@@ -115,17 +121,21 @@ internal class KeyboardEngine(
         editor = attribute
         val kind = attribute.inputType and InputType.TYPE_MASK_CLASS
         val variation = attribute.inputType and InputType.TYPE_MASK_VARIATION
+        incognito = attribute.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
         secure = when (kind) {
             InputType.TYPE_CLASS_TEXT -> variation in setOf(InputType.TYPE_TEXT_VARIATION_PASSWORD,
                 InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD, InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)
             InputType.TYPE_CLASS_NUMBER -> variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
             else -> false
         }
-        ordinaryField = kind == InputType.TYPE_CLASS_TEXT && !secure &&
-            attribute.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING == 0 &&
-            variation !in setOf(InputType.TYPE_TEXT_VARIATION_URI, InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
-                InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS, InputType.TYPE_TEXT_VARIATION_FILTER) &&
-            attribute.inputType and (InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE) == 0
+        val textField = kind == InputType.TYPE_CLASS_TEXT && !secure
+        val appCompletes = attribute.inputType and InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE != 0
+        val plainText = textField && variation !in setOf(InputType.TYPE_TEXT_VARIATION_URI, InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS, InputType.TYPE_TEXT_VARIATION_FILTER)
+        ordinaryField = plainText && !appCompletes && attribute.inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS == 0
+        // A swipe is explicit input, including in fields such as the Instagram composer that turn off
+        // automatic suggestions. Private browser address bars also double as search boxes.
+        swipeField = !appCompletes && (plainText || (textField && incognito && variation == InputType.TYPE_TEXT_VARIATION_URI))
         resetTyping(); word = null; clearSpaces()
         pad = Pad.of(attribute.inputType)
         symbols = pad != null
@@ -158,7 +168,9 @@ internal class KeyboardEngine(
     }
 
     /** Android's personal dictionary changed: every loaded language reads it again, off the main thread. */
-    fun personalWordsChanged() { for (decoder in models.values) loadPersonal(decoder) }
+    fun personalWordsChanged() {
+        if (incognito) models.clear() else for (decoder in models.values) loadPersonal(decoder)
+    }
     private fun loadPersonal(decoder: SpatialDecoder) {
         val read = readPersonal ?: return
         background.execute { decoder.personal = read(decoder.model) }
@@ -179,7 +191,7 @@ internal class KeyboardEngine(
     }
     private fun showPlane() {
         surface?.showPage(KeyboardPage(layoutLanguage(), symbols, more, shift.uppercase, shift.locked, EnterKey.from(editor),
-            FieldKind.of(editor?.inputType ?: 0), pad))
+            FieldKind.of(editor?.inputType ?: 0), pad, incognito))
     }
     /** Shift went down: it acts at once, so a held shift and a letter type a capital. */
     fun shiftDown() {
@@ -220,10 +232,12 @@ internal class KeyboardEngine(
         resetTyping()
         word = if (ordinaryField) {
             try {
-                TypingWord(models.getOrPut(language) { loadDecoder(language).also(::loadPersonal) }, feedback.spatial,
-                    learned = { feedback.learned(language, LearningMode.Tap) },
-                    contextEnabled = { feedback.learnContext },
-                    learnedFromSwipe = { feedback.learned(language, LearningMode.Swipe) })
+                val decoder = if (incognito) loadDecoder(language)
+                    else models.getOrPut(language) { loadDecoder(language).also(::loadPersonal) }
+                TypingWord(decoder, feedback.spatial,
+                    learned = { learnedWords(language, LearningMode.Tap) },
+                    contextEnabled = { personalContextEnabled },
+                    learnedFromSwipe = { learnedWords(language, LearningMode.Swipe) })
                     .also { it.suggestSwearWords = feedback.suggestSwearWords; it.addsCapitals = feedback.autoCapitalize }
             } catch (_: java.io.IOException) { null } // The editor can still type if its assets cannot be read.
         } else null
@@ -242,7 +256,7 @@ internal class KeyboardEngine(
             pendingChip = Runnable {
                 pendingChip = null
                 if (word === w && w.token == token) surface?.suggestions(w.strip(autocorrect = true).map {
-                    if (it.kind == Suggestion.Kind.Fix && feedback.blocked(w.decoder.model.language, token, it.text))
+                    if (it.kind == Suggestion.Kind.Fix && rejectedCorrection(w.decoder.model.language, token, it.text))
                         Suggestion(it.text, Suggestion.Kind.Word) else it
                 })
             }.also { main.postDelayed(it, CHIP_PAUSE_MS) }
@@ -378,7 +392,7 @@ internal class KeyboardEngine(
             if (swap != null && replace(swap.original, swap.replacement + " ")) { resetTyping(); afterSpace(now); return }
             if (feedback.autocorrect && old.isNotEmpty() && endsWith(prefix + old)) {
                 val fix = w.finish(' ', point, grid)
-                if (fix != null && !feedback.blocked(lang, fix.original, fix.replacement) && replace(fix.original, fix.replacement + " ")) {
+                if (fix != null && !rejectedCorrection(lang, fix.original, fix.replacement) && replace(fix.original, fix.replacement + " ")) {
                     cancelChip()
                     undo = Undo(lang, fix.original, fix.replacement)
                     if (expectedCaret >= 0) expectedCaret += fix.replacement.length + 1 - fix.original.length
@@ -416,7 +430,7 @@ internal class KeyboardEngine(
             if (swap != null && replace(swap.original, swap.replacement + value)) { resetTyping(); showPredictions(before()); inputDone(); return }
             if (feedback.autocorrect && w.token.isNotEmpty() && endsWith(prefix + w.token)) {
                 val fix = w.finish(value[0])
-                if (fix != null && !feedback.blocked(w.decoder.model.language, fix.original, fix.replacement) &&
+                if (fix != null && !rejectedCorrection(w.decoder.model.language, fix.original, fix.replacement) &&
                     replace(fix.original, fix.replacement + value)) { resetTyping(); showPredictions(before()); inputDone(); return }
             }
         }
@@ -435,7 +449,7 @@ internal class KeyboardEngine(
         val last = undo
         undo = null
         if (last != null && endsWith(last.replacement + " ") && replace(last.replacement + " ", last.original)) {
-            feedback.undo(last.language, last.original, last.replacement)
+            if (personalLearningAllowed) feedback.undo(last.language, last.original, last.replacement)
             val typed = last.original.substringAfterLast(' ')
             val beforeTyped = before().dropLast(typed.length)
             prefix = beforeTyped.takeLast(40)
@@ -543,14 +557,20 @@ internal class KeyboardEngine(
     private fun previousForLearning(before: String): String? =
         if (before.lastOrNull()?.isWhitespace() == true) TypingWord.currentToken(before.trimEnd()) else null
 
+    fun learnedWords(language: String, mode: LearningMode): LearnedWords =
+        if (personalLearningAllowed) feedback.learned(language, mode) else LearnedWords.Empty
+
+    private fun rejectedCorrection(language: String, original: String, replacement: String) =
+        personalLearningAllowed && feedback.blocked(language, original, replacement)
+
     private fun learnTyped(w: TypingWord, text: String, previous: String?, explicit: Boolean = false) {
         val model = w.decoder.model
-        if (ordinaryField && text.all { c -> !c.isLetter() || model.code(c.lowercaseChar()) != 0 })
+        if (personalLearningAllowed && text.all { c -> !c.isLetter() || model.code(c.lowercaseChar()) != 0 })
             feedback.learn(model.language, LearningMode.Tap, text, previous, explicit)
     }
 
     private fun learnSwipe(swipe: Swiped, word: String, explicit: Boolean = false) {
-        if (ordinaryField) feedback.learn(swipe.language, LearningMode.Swipe, word, swipe.previous,
+        if (personalLearningAllowed) feedback.learn(swipe.language, LearningMode.Swipe, word, swipe.previous,
             explicit, swipe.candidates.first().takeIf { explicit && !it.equals(word, ignoreCase = true) })
     }
 

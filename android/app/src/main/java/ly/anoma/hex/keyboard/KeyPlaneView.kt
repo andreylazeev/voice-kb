@@ -109,6 +109,12 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     // The emoji panel: AndroidX's picker where the strip and the letter rows are, then ABC, space and delete.
     private var picker: EmojiPickerView? = null
     private val emojiBottom = KeyRowLayout(context, 10f, side, gap, insetTop, insetBottom + bottomExtra)
+    private val emojiSpace: KeyCap
+    private val emojiIncognitoIcon = ImageView(context).apply {
+        setImageResource(R.drawable.ic_incognito)
+        imageTintList = ColorStateList.valueOf(quiet)
+        visibility = GONE
+    }
     var emojiOpen = false
         private set
     private var commaText = ","
@@ -241,7 +247,8 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             modifier, 17f) { host.closeEmoji(); ime.engine.letters() }
         letters.textEntry = false
         typesOnLift(letters, preview = { null }, holds = { emptyList() }, type = { letters.performClick() })
-        val emojiSpace = caps.cap("", context.getString(R.string.keyboard_space), caps.key, 14f) { ime.engine.space() }
+        emojiSpace = caps.cap("", context.getString(R.string.keyboard_space), caps.key, 14f) { ime.engine.space() }
+        emojiSpace.face.addView(emojiIncognitoIcon, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
         emojiSpace.sound = AudioManager.FX_KEYPRESS_SPACEBAR
         typesOnLift(emojiSpace, preview = { null }, holds = { emptyList() }, type = { emojiSpace.performClick() })
         emojiBottom.add(letters, 0f, KeyboardMetrics.MODE)
@@ -323,6 +330,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         }
         // Another kind of field in the same box (the app changed its type): the keys, not the emoji panel over them.
         if (emojiOpen) host.closeEmoji()
+        if (shown?.incognito != page.incognito) discardEmojiPicker()
         current = page
         clearCallout(); endSlide(); grid = null; letters.clear(); caseKeys.clear(); slides.clear(); shiftIcon = null
         rows.removeAllViews()
@@ -579,8 +587,8 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         val share = if (landscape) 0.67f else 0.6f
         val grow = minOf(px(KeyboardMetrics.EMOJI_GROW), (resources.displayMetrics.heightPixels * share).toInt() - keyboard).coerceAtLeast(0)
         val pickerHeight = 3 * rowHeight + reach + extra + grow
-        val p = picker?.also { it.setRecentEmojiProvider(recents); it.post { it.toTop() } } ?: EmojiPickerView(ContextThemeWrapper(context, R.style.HexEmoji)).also { p ->
-            p.setRecentEmojiProvider(recents)
+        val incognito = current?.incognito == true
+        val p = picker ?: EmojiPickerView(emojiContext(incognito)).also { p ->
             p.setOnEmojiPickedListener { item ->
                 // Gboard's tap as an emoji is chosen; the picker's own view plays the click.
                 if (vibrates(context, ime.feedback.haptics)) p.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -588,21 +596,34 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             }
             picker = p; addView(p, 0, LayoutParams(LayoutParams.MATCH_PARENT, pickerHeight))
         }
+        if (!incognito) { p.setRecentEmojiProvider(recents); p.post { p.toTop() } }
         sizeEmojiGrid(p)
         if (p.layoutParams.height != pickerHeight) p.layoutParams = p.layoutParams.apply { height = pickerHeight }
         rows.visibility = GONE; bottom.visibility = GONE
         p.visibility = VISIBLE; emojiBottom.visibility = VISIBLE
+        emojiIncognitoIcon.visibility = if (incognito) VISIBLE else GONE
+        emojiSpace.stateDescription = if (incognito) context.getString(R.string.keyboard_incognito) else null
         emojiOpen = true
+    }
+    private fun emojiContext(incognito: Boolean): Context {
+        val themed = ContextThemeWrapper(context, R.style.HexEmoji)
+        return if (incognito) IncognitoEmojiContext(themed) else themed
     }
     fun closeEmoji() {
         if (!emojiOpen) return
         cancelGestures()
         picker?.visibility = GONE; emojiBottom.visibility = GONE
+        if (current?.incognito == true) discardEmojiPicker()
         rows.visibility = VISIBLE; bottom.visibility = VISIBLE
         emojiOpen = false
     }
     private val recents by lazy { RecentEmoji(context) }
     private var pickerWidth = 0
+    private fun discardEmojiPicker() {
+        picker?.let(::removeView)
+        picker = null
+        pickerWidth = 0
+    }
     private fun sizeEmojiGrid(picker: EmojiPickerView) {
         if (width <= 0 || width == pickerWidth) return
         pickerWidth = width
