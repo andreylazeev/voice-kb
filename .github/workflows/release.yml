@@ -53,7 +53,8 @@ jobs:
       - name: Test and build unsigned APK
         if: steps.version.outputs.tag != ''
         run: |
-          sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;29.0.14206865'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;29.0.14206865'
           rustup target add aarch64-linux-android
           ./android/gradlew -p android :app:testDebugUnitTest :app:assembleRelease
 
