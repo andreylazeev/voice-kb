@@ -64,11 +64,11 @@ internal class FutoSwipeDecoder(
     }
 
     fun suggestions(emissions: FloatArray, previous: String?, learned: LearnedWords, typed: LearnedWords,
-                    learnContext: Boolean): List<String> {
+                    learnContext: Boolean, allow: (String) -> Boolean = { true }): List<String> {
         require(emissions.size == FutoLayout.STEPS * FutoLayout.CLASSES)
-        val candidates = beam(emissions).toMutableList()
+        val candidates = beam(emissions, allow).toMutableList()
         val added = (learned.words.keys + typed.words.keys).asSequence()
-            .filter { word -> word !in vocabulary && (learned.knows(word) || typed.knows(word)) }
+            .filter { word -> word !in vocabulary && (learned.knows(word) || typed.knows(word)) && allow(word) }
             .sortedByDescending { (learned.words[it] ?: 0) + (typed.words[it] ?: 0) }
             .take(48)
         for (text in added) {
@@ -95,7 +95,7 @@ internal class FutoSwipeDecoder(
         }.asSequence().map { it.word.text }.distinctBy(String::lowercase).take(3).toList()
     }
 
-    private fun beam(emissions: FloatArray): List<Candidate> {
+    private fun beam(emissions: FloatArray, allow: (String) -> Boolean): List<Candidate> {
         var states = listOf(State(1, 0f))
         val expanded = HashMap<Int, Float>(BEAM * 8)
         for (step in 0 until FutoLayout.STEPS) {
@@ -126,7 +126,7 @@ internal class FutoSwipeDecoder(
         }
         return best.flatMap { (node, score) ->
             val words = listOf(terminals.getValue(node)) + alternateSpellings[node].orEmpty()
-            words.map { Candidate(it, rank(score, depth[node], it.frequency)) }
+            words.filter { allow(it.text) }.map { Candidate(it, rank(score, depth[node], it.frequency)) }
         }.sortedByDescending { it.score }.distinctBy { it.word.text.lowercase() }.take(16)
     }
 

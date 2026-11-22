@@ -122,4 +122,23 @@
     <string name="theme_swatch_rose">Розовый</string>
     <string name="theme_swatch_peach">Персиковый</string>
     <string name="theme_swatch_gold">Золотой</string>
+    <string name="cleanup_models_title">Локальные модели очистки</string>
+    <string name="cleanup_models_basic">Встроенная очистка</string>
+    <string name="cleanup_models_basic_detail">Быстрая обработка без загрузки</string>
+    <string name="cleanup_models_device">ОЗУ %1$s · Для этого телефона подходит %2$s</string>
+    <string name="cleanup_models_detail">Модель правит итоговый текст на телефоне в режиме «Бережная». Полоски показывают относительную нагрузку на устройство.</string>
+    <string name="cleanup_model_light">Лёгкая</string>
+    <string name="cleanup_model_balanced">Сбалансированная</string>
+    <string name="cleanup_model_heavy">Более мощная</string>
+    <string name="cleanup_model_recommended">Рекомендуем</string>
+    <string name="cleanup_model_size">%1$s · Загрузка %2$s</string>
+    <string name="cleanup_model_verifying">Проверяем скачанный файл…</string>
+    <string name="cleanup_model_progress">Загрузка · %1$d%%</string>
+    <string name="cleanup_model_failed">Не удалось скачать модель. Проверьте подключение и свободное место.</string>
+    <string name="cleanup_model_selected">Выбрана ✓</string>
+    <string name="cleanup_model_select">Выбрать</string>
+    <string name="cleanup_model_delete">Удалить</string>
+    <string name="cleanup_model_download">Скачать</string>
+    <string name="cleanup_model_pause">Приостановить</string>
+    <string name="cleanup_model_resume">Продолжить загрузку</string>
 </resources>

@@ -45,8 +45,10 @@ internal enum class DictationLanguage(val code: String, val label: String, val l
 internal data class SpeechOptions(val style: Style, val spoken: DictationLanguage, val clean: Boolean, val translate: Boolean,
                                    val lowercase: Boolean = false, val endWithPeriod: Boolean = true,
                                    val formatLists: Boolean = false, val spokenPunctuation: Boolean = false,
-                                   val vocabulary: List<String> = emptyList())
+                                   val vocabulary: List<String> = emptyList(),
+                                   val cleanupModel: CleanupModel? = null)
 internal class SpeechPreferences(context: Context) {
+    private val app = context.applicationContext
     private val prefs = context.getSharedPreferences("speech", Context.MODE_PRIVATE)
     var style: Style
         get() = if (prefs.getString("style", null) == Style.Verbatim.name || !prefs.getBoolean("clean", true))
@@ -89,9 +91,13 @@ internal class SpeechPreferences(context: Context) {
     var vocabularyTerms: List<String>
         get() = prefs.getString("vocabularyTerms", null)?.split('\n').orEmpty().filter(String::isNotEmpty)
         set(value) { prefs.edit().putString("vocabularyTerms", VocabularySpelling.sanitize(value).joinToString("\n")).apply() }
+    var cleanupModel: CleanupModel?
+        get() = prefs.getString("cleanupModel", null)?.let { id -> CleanupModel.entries.firstOrNull { it.name == id } }
+        set(value) { prefs.edit().putString("cleanupModel", value?.name).apply() }
     fun options(nextEnglish: Boolean?): SpeechOptions {
         val selected = style
         return SpeechOptions(selected, spoken, selected != Style.Verbatim, false, lowercase, endWithPeriod,
-            formatLists, spokenPunctuation, if (customVocabulary) vocabularyTerms else emptyList())
+            formatLists, spokenPunctuation, if (customVocabulary) vocabularyTerms else emptyList(),
+            cleanupModel?.takeIf { selected != Style.Verbatim && CleanupModels.ready(app, it) })
     }
 }

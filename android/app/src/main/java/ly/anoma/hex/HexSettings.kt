@@ -3,10 +3,12 @@ package ly.anoma.hex
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.app.ActivityManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
+import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -43,9 +45,10 @@ private enum class Page(val title: Int) {
     Home(R.string.app_name), Dictation(R.string.settings_dictation), Keyboard(R.string.settings_keyboard), Privacy(R.string.settings_privacy),
     Language(R.string.settings_dictation_language), Layout(R.string.settings_keyboard_layout), Cleanup(R.string.settings_clean), Theme(R.string.settings_theme), CustomTheme(R.string.theme_custom),
     Learning(R.string.settings_learning),
+    CleanupModels(R.string.cleanup_models_title),
     Policy(R.string.settings_privacy_policy), Licences(R.string.settings_licences), Licence(R.string.settings_licences);
     val parent get() = when (this) {
-        Language, Cleanup -> Dictation
+        Language, Cleanup, CleanupModels -> Dictation
         Layout, Theme, Learning -> Keyboard
         CustomTheme -> Theme
         Policy, Licences -> Privacy
@@ -186,6 +189,9 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                     Page.Dictation -> {
                         Card {
                             Entry(stringResource(R.string.settings_clean), value = stringResource(style.label), action = { open(Page.Cleanup) })
+                            Rule(); Entry(stringResource(R.string.cleanup_models_title),
+                                value = speech.cleanupModel?.label ?: stringResource(R.string.cleanup_models_basic),
+                                action = { open(Page.CleanupModels) })
                             Rule(); Toggle(stringResource(R.string.dictation_lowercase), stringResource(R.string.dictation_lowercase_detail),
                                 lowercase) { speech.lowercase = it }
                             Rule(); Toggle(stringResource(R.string.dictation_end_with_period), stringResource(R.string.dictation_end_with_period_detail),
@@ -260,6 +266,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                             Entry(stringResource(it.label), value = if (it == style) "✓" else "", action = { speech.style = it; open(Page.Dictation) })
                         }
                     }
+                    Page.CleanupModels -> CleanupModelPicker(speech)
                     Page.Theme -> AndroidView(modifier = Modifier.fillMaxWidth(), factory = { host ->
                         themePicker(host, appearance) { theme ->
                             if (theme == VoiceTheme.Custom) open(Page.CustomTheme)
@@ -364,6 +371,93 @@ private fun reflow(lines: List<String>) = buildString {
 }
 @Composable private fun Card(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(voiceColorResource(R.color.sheet)), content = content)
+}
+
+@Composable
+private fun CleanupModelPicker(speech: SpeechPreferences) {
+    val context = LocalContext.current
+    val downloads by CleanupModels.state.collectAsState()
+    var selected by remember { mutableStateOf(speech.cleanupModel) }
+    val memory = remember {
+        val activity = checkNotNull(context.getSystemService(ActivityManager::class.java))
+        val info = ActivityManager.MemoryInfo().also(activity::getMemoryInfo)
+        info.totalMem to activity.isLowRamDevice
+    }
+    val recommended = CleanupModel.recommended(memory.first / 1_073_741_824.0, memory.second)
+    val busy = downloads.values.any { it.phase == CleanupModels.Phase.Downloading || it.phase == CleanupModels.Phase.Verifying }
+
+    Label(stringResource(R.string.cleanup_models_device, Formatter.formatShortFileSize(context, memory.first),
+        recommended?.label ?: stringResource(R.string.cleanup_models_basic)), muted = true, size = 14, lines = Int.MAX_VALUE)
+    Label(stringResource(R.string.cleanup_models_detail), muted = true, size = 14, lines = Int.MAX_VALUE)
+
+    Card {
+        Entry(stringResource(R.string.cleanup_models_basic), stringResource(R.string.cleanup_models_basic_detail),
+            value = if (selected == null) "✓" else "", action = {
+                selected = null
+                speech.cleanupModel = null
+            })
+    }
+    for ((index, model) in CleanupModel.entries.withIndex()) {
+        val installed = CleanupModels.ready(context, model)
+        val download = downloads[model]
+        val tier = when (model) {
+            CleanupModel.Qwen -> R.string.cleanup_model_light
+            CleanupModel.Gemma2 -> R.string.cleanup_model_balanced
+            CleanupModel.Gemma4 -> R.string.cleanup_model_heavy
+        }
+        val phase = download?.phase ?: CleanupModels.Phase.Idle
+        val waiting = phase == CleanupModels.Phase.Downloading || phase == CleanupModels.Phase.Verifying
+        val fraction = ((download?.bytes ?: 0L) / model.size.toFloat()).coerceIn(0f, 1f)
+        Card {
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Label(model.label, weight = FontWeight.SemiBold)
+                    if (recommended == model) Label(stringResource(R.string.cleanup_model_recommended), size = 12)
+                }
+                Label(stringResource(R.string.cleanup_model_size, stringResource(tier),
+                    Formatter.formatShortFileSize(context, model.size)), muted = true, size = 13, lines = 2)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(CleanupModel.entries.size) { bar ->
+                        Box(Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(4.dp))
+                            .background(voiceColorResource(R.color.ink).copy(alpha = if (bar <= index) .74f else .13f)))
+                    }
+                }
+                if (waiting) {
+                    Label(stringResource(if (phase == CleanupModels.Phase.Verifying) R.string.cleanup_model_verifying
+                        else R.string.cleanup_model_progress, (fraction * 100).toInt()), muted = true, size = 13)
+                } else if (phase == CleanupModels.Phase.Failed) {
+                    Label(stringResource(R.string.cleanup_model_failed), muted = true, size = 13, lines = 3)
+                }
+            }
+            Row(Modifier.padding(horizontal = 4.dp)) {
+                when {
+                    installed -> {
+                        if (selected == model) {
+                            Label(stringResource(R.string.cleanup_model_selected), mod = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), muted = true, size = 13)
+                        } else Action(stringResource(R.string.cleanup_model_select)) {
+                            selected = model
+                            speech.cleanupModel = model
+                        }
+                        if (!busy) Action(stringResource(R.string.cleanup_model_delete)) {
+                            CleanupModels.delete(context, model)
+                            if (selected == model && !CleanupModels.ready(context, model)) {
+                                selected = null
+                                speech.cleanupModel = null
+                            }
+                        }
+                    }
+                    phase == CleanupModels.Phase.Downloading -> Action(stringResource(R.string.cleanup_model_pause)) {
+                        CleanupModels.pause()
+                    }
+                    !busy -> Action(stringResource(if (phase == CleanupModels.Phase.Failed || phase == CleanupModels.Phase.Paused)
+                        R.string.cleanup_model_resume else R.string.cleanup_model_download)) {
+                        CleanupModels.download(context, model)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable private fun DictationPreview(phase: SpeechPhase, liveSpeech: LiveSpeech?, level: FloatState) {

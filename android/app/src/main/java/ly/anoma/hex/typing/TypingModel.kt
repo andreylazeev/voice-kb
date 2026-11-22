@@ -110,6 +110,12 @@ internal class TypingModel private constructor(private val data: ByteBuffer, val
     }
     val neverSuggest = NeverSuggest(this, list)
     fun context(spelling: String) = neverSuggest.context(spelling, index(spelling))
+    fun addSwipeSpellings(words: MutableMap<String, Int>) {
+        if (language != "ru" && language != "uk") return
+        for (spelling in neverSuggest.swearWords) {
+            if (spelling.all(Char::isLetter) && index(spelling) >= 0) words.putIfAbsent(spelling, 177)
+        }
+    }
     /** The three likeliest allowed words after `previous`; [fill] tops a short list up with the
      * commonest words. */
     fun nextWords(previous: Int, swears: Boolean, fill: Boolean = true): List<String> {

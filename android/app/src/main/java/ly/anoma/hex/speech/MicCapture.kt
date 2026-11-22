@@ -1,6 +1,7 @@
 package ly.anoma.hex.speech
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -23,6 +24,7 @@ private const val LIVE_BATCH = SAMPLE_RATE / 5
 // them); results are inserted in the order they were spoken. Every posted result belongs to its
 // original ticket, including failures.
 internal class MicCapture(
+    private val context: Context,
     private val recognizer: Recognizer,
     private val update: (SpeechPhase, String?) -> Unit,
     private val meter: (Float) -> Unit,
@@ -67,6 +69,7 @@ internal class MicCapture(
         active = ticket
         publishPreview(ticket, null)
         publish(SpeechPhase.Opening)
+        options.cleanupModel?.let { ModelCleanup.warm(context, it) }
         recorder.execute {
             try {
                 record(ticket)
@@ -187,7 +190,13 @@ internal class MicCapture(
                 when (val text = raw?.let { SpokenText.forDictation(it, options) }) {
                     null -> complete(ticket, "Couldn’t transcribe. Try again.")
                     "" -> complete(ticket, "No speech heard")
-                    else -> complete(ticket, text = text)
+                    else -> {
+                        val model = options.cleanupModel
+                        if (model == null) complete(ticket, text = text)
+                        else ModelCleanup.submit(context, model, text, { ticket.cancelled }) { polished ->
+                            complete(ticket, text = SpokenText.forDictation(polished, options))
+                        }
+                    }
                 }
             } catch (_: UnsatisfiedLinkError) {
                 complete(ticket, "Speech model unavailable")
@@ -214,7 +223,8 @@ internal class MicCapture(
         transcriber.execute {
             try {
                 if (ticket.cancelled) return@execute
-                val result = feedLive(ticket, pcm, 0, pcm.size) ?: return@execute
+                val raw = feedLive(ticket, pcm, 0, pcm.size) ?: return@execute
+                val result = SpokenText.forPreview(raw, ticket.options)
                 main.post {
                     if (active === ticket && !ticket.cancelled && !ticket.finish)
                         publishPreview(ticket, result.takeIf { it.text.isNotBlank() })

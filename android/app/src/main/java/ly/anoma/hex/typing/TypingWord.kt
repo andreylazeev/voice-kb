@@ -129,6 +129,7 @@ internal class TypingWord(
         }
         fix?.let { pool.add(it) }
         if (autocorrect && fix == null && model.language == "en") suggestOnly[lower]?.let { add(matchCase(token, it)) }
+        if (suggestSwearWords) model.neverSuggest.swearCompletion(lower)?.let { add(shown(it)) }
         // Your own word, completed once two letters match, before the dictionary's: a word you added is
         // likelier what you mean than a reading's runner-up ("zor" offers "Zorbex" beside the fix "or").
         if (token.length >= 2) decoder.personal?.completions(token)?.firstOrNull()?.let { add(yours(it)) }

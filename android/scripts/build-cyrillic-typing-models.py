@@ -27,6 +27,12 @@ def model(language, alphabet):
         word = text.lower().replace("’", "'")
         if 1 <= len(word) <= 32 and all(letter in codes for letter in word):
             ranks[word] = max(rank, ranks.get(word, 0))
+    for line in (ASSETS / "typing" / "never-suggest.tsv").read_text(encoding="utf-8").splitlines():
+        if not line.startswith(f"{language}\tswear\t"):
+            continue
+        word = line.split("\t", 2)[2]
+        if all(letter in codes for letter in word):
+            ranks.setdefault(word, 177)
     # Dictate encodes log-frequency ranks. Restore relative weights before quantising costs.
     weights = {word: math.exp((rank - 255) * .145) for word, rank in ranks.items()}
     encoded = {word: bytes(codes[letter] for letter in word) for word in weights}

@@ -1,6 +1,9 @@
 package ly.anoma.hex.keyboard
 
 import ly.anoma.hex.speech.DictationLanguage
+import ly.anoma.hex.speech.LiveSpeech
+import ly.anoma.hex.speech.CleanupModel
+import ly.anoma.hex.speech.ModelCleanup
 import ly.anoma.hex.speech.SpeechOptions
 import ly.anoma.hex.speech.SpokenText
 import ly.anoma.hex.speech.Style
@@ -11,6 +14,43 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class VoiceKbBehaviorTest {
+    @Test fun dictationRepairsWholeSpokenRestartsAndCorrections() {
+        val options = SpeechOptions(Style.Polished, DictationLanguage.Russian, clean = true, translate = false)
+        for ((raw, expected) in listOf(
+            "Я хотел, я хотел бы спросить про встречу." to "Я хотел бы спросить про встречу.",
+            "Мы созвонимся в четверг, точнее в пятницу." to "Мы созвонимся в пятницу.",
+            "Мы встретимся в три, нет, в четыре часа." to "Мы встретимся в четыре часа.",
+            "Я отправлю файл сегодня. Нет, завтра утром." to "Я отправлю файл завтра утром.",
+            "Я это самое хотел спросить, во сколько встреча." to "Я хотел спросить, во сколько встреча.",
+            "Я открою файл, ну который ты прислал." to "Я открою файл, который ты прислал.",
+            "Я думал, М... Ну, я думал, что встреча завтра." to "Я думал, что встреча завтра.",
+            "Короче, я как бы хочу проверить, что всё работает." to "Я хочу проверить, что всё работает.",
+            "Я не в четверг, точнее в пятницу буду знать расписание." to
+                "Я не в четверг, точнее в пятницу буду знать расписание.",
+        )) assertEquals(raw, expected, SpokenText.forDictation(raw, options))
+    }
+
+    @Test fun liveDictationUsesCleanupAcrossTheConfirmedBoundary() {
+        val options = SpeechOptions(Style.Polished, DictationLanguage.Russian, clean = true, translate = false)
+        val raw = LiveSpeech("Ну, я хотел,", "я хотел бы, эм, уточнить время встречи")
+        val preview = SpokenText.forPreview(raw, options)
+        assertEquals("Я хотел бы уточнить время встречи", preview.text)
+        assertEquals(raw, SpokenText.forPreview(raw, options.copy(style = Style.Verbatim)))
+        assertEquals(raw, SpokenText.forPreview(raw, options.copy(clean = false)))
+    }
+
+    @Test fun localModelMayRemoveFillersButCannotAddWordsOrChangeNumbersAndNegation() {
+        val text = "Собственно говоря, я не смогу в 12."
+        assertEquals("Я не смогу в 12.", ModelCleanup.accept(text, "Я не смогу в 12."))
+        assertEquals(null, ModelCleanup.accept(text, "Я смогу в 12."))
+        assertEquals(null, ModelCleanup.accept(text, "Я не смогу в 13."))
+        assertEquals(null, ModelCleanup.accept(text, "Я не успею в 12."))
+        assertEquals(null, ModelCleanup.accept("Ответил «Ну, ладно» и ушёл.", "Ответил «Ладно» и ушёл."))
+        assertEquals(CleanupModel.Qwen, CleanupModel.recommended(4.0, false))
+        assertEquals(CleanupModel.Gemma2, CleanupModel.recommended(7.2, false))
+        assertEquals(CleanupModel.Gemma4, CleanupModel.recommended(10.8, false))
+        assertEquals(null, CleanupModel.recommended(3.0, true))
+    }
     @Test fun floatingPanelResizesWidthAndHeightIndependently() {
         val panel = PanelSettings(KeyboardMode.Floating, width = 320f, rowHeight = 41f)
         val taller = panel.resize(horizontalDp = 0f, verticalDp = 40f, maxWidth = 500f, maxRowHeight = 72f)

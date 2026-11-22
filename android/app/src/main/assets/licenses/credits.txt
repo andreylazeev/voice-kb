@@ -61,3 +61,7 @@ The Russian and Ukrainian HXTM v3 typing models use the word ranks and adjacency
 
 English and Russian swipe typing powered by FUTO Swipe. The unmodified honorable_sturgeon float32 encoder is distributed under the FUTO Model Weights License 1.0, included as futo-model-weights.md. https://huggingface.co/futo-org/futo-swipe
 ExecuTorch by the PyTorch contributors. See executorch.txt.
+
+Local transcript cleanup uses Google LiteRT-LM (Apache License 2.0).
+Optional, separately downloaded weights: Qwen3.5-0.8B, Gemma 4 E2B and Gemma 4 E4B (Apache License 2.0).
+Sources: https://github.com/google-ai-edge/LiteRT-LM and https://huggingface.co/litert-community

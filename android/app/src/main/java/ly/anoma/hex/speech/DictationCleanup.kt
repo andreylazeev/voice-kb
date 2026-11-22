@@ -7,12 +7,13 @@ internal object DictationCleanup {
     private const val wordCharacter = "[\\p{L}\\p{M}\\p{N}_@'’‑-]"
     private fun words(pattern: String) = Regex("(?iu)(?<!$wordCharacter)(?:$pattern)(?!$wordCharacter)")
 
-    private val russianPauses = words("э+(?:[-‑–—]э+)*м*|м+(?:[-‑–—]м+)*")
+    private val russianPauses = words("э+(?:[-‑–—]э+)*м*(?:[-‑–—]м+)*|м+(?:[-‑–—]м+)*|гм+|хм+")
     private val ukrainianPauses = words("е{2,}|е+(?:[-‑–—]е+)+|ем+|гм+|м{2,}")
-    private val englishPauses = words("um+|uh+|erm+|u+h+m*")
+    private val englishPauses = words("um+|uh+|erm+|u+h+m*|hmm+")
     private val russianFillers = words(
         "ну(?:[ \\t]+(?:короче|вот))?|короче(?:[ \\t]+говоря)?|в[ \\t]+общем(?:[-‑]то)?|" +
-            "как[ \\t]+бы(?:[ \\t]+вот)?|типа|так[ \\t]+сказать|это[ \\t]+самое|значит|вот",
+            "как[ \\t]+бы(?:[ \\t]+вот)?|типа|так[ \\t]+сказать|это[ \\t]+самое|значит|вот|" +
+            "собственно(?:[ \\t]+говоря)?",
     )
     private val letterNames = setOf("буква", "букву", "буквы", "буквой", "звук", "звука", "литера", "литеру")
     private val subjects = setOf("я", "мы", "он", "она", "они", "ты", "вы", "это")
@@ -23,12 +24,14 @@ internal object DictationCleanup {
     private val generalStatement = subjects + setOf("будем", "всё", "давайте", "завтра", "можно", "надо", "нужно",
         "потом", "просто", "сегодня", "сейчас", "теперь")
     private val narrative = generalStatement + setOf("вчера", "думал", "думала", "думаю", "пойду", "получается",
-        "пошёл", "пошла", "решил", "решила", "решили", "сказал", "сказала", "собираюсь", "хотел", "хотела")
+        "пошёл", "пошла", "решил", "решила", "решили", "сказал", "сказала", "собираюсь", "хотел", "хотела", "хочу")
     private val firstPersonEndings = listOf("аю", "яю", "ую", "ею", "лю", "рю", "юсь")
     private val nonThirdPerson = setOf("я", "мы", "ты", "вы", "они")
+    private val relativeWords = setOf("который", "которого", "которому", "которым", "котором", "которая",
+        "которой", "которую", "которое", "которые", "которых", "когда", "куда", "где", "что", "чтобы")
     private val commaContinuations = setOf("а", "где", "дабы", "если", "и", "или", "как",
         "какой", "когда", "который", "куда", "либо", "но", "пока", "поскольку", "потому", "причём", "хотя",
-        "чем", "что", "чтобы", "but", "if", "so", "that", "what", "when", "where", "whether", "which")
+        "чем", "что", "чтобы", "but", "if", "so", "that", "what", "when", "where", "whether", "which") + relativeWords
     private val emphasis = setOf("да", "нет", "не", "ни", "очень", "еле", "точно", "тихо", "сильно", "долго",
         "быстро", "быстрее", "вот", "давай", "скорее", "совсем", "чуть", "пожалуйста", "ні", "дуже", "no", "not",
         "yes", "really", "very")
@@ -39,6 +42,19 @@ internal object DictationCleanup {
         "(?:[ \\t]*,[ \\t]*\\1(?!$wordCharacter))+(?:[ \\t]*(,))?")
     private val stutter = Regex("(?iu)(?<!$wordCharacter)([бвгджзклмнпрстфхцчшщ])[-‑]" +
         "(?:\\1[-‑])*(\\1[а-яё]{2,})(?!$wordCharacter)")
+    private fun phraseRestart(openers: String) = words("((?:$openers)(?:[ \\t]+\\p{L}+){1,3})" +
+        "[ \\t]*(?:[,–—…]|\\.\\.\\.)?[ \\t]+\\1")
+    private val russianRestart = phraseRestart((subjects + "мне" + "нам").joinToString("|"))
+    private val englishRestart = phraseRestart("i|we|you|he|she|they|it")
+    private const val timeSlot = "понедельник(?:а|у|е)?|вторник(?:а|у|е)?|сред[ауеы]|четверг(?:а|у|е)?|" +
+        "пятниц[аеуы]|суббот[аеуы]|воскресень[еяюи]|час|два|три|четыре|пять|шесть|семь|восемь|девять|" +
+        "десять|одиннадцать|двенадцать|\\d{1,2}(?::\\d{2})?"
+    private const val EDIT_MARKER = "[ \\t]*[,.–—…]?[ \\t]+(?:точнее|вернее|(?:ой[ \\t]+)?нет)[ \\t]*,?[ \\t]+"
+    private val scheduleCorrection = words("(в|во|до|на|с|со|после|к|ко)[ \\t]+(?:$timeSlot)" + EDIT_MARKER +
+        "(\\1[ \\t]+(?:$timeSlot))(?![ \\t]+(?:${subjects.joinToString("|")})(?!$wordCharacter))")
+    private const val relativeDay = "сегодня|вчера|завтра|позавчера|послезавтра"
+    private val dateCorrection = words("(?:$relativeDay)$EDIT_MARKER($relativeDay)" +
+        "(?![ \\t]+(?:${subjects.joinToString("|")})(?!$wordCharacter))")
     private val firstWord = Regex("^[,.;:!?… \\t]*([\\p{L}\\p{N}]+)")
     private val lastWord = Regex("([\\p{L}]+)[,;: \\t]*$")
     private val horizontalWhitespace = Regex("[ \\t]+")
@@ -68,6 +84,8 @@ internal object DictationCleanup {
         }
         if (language == "ru") {
             cleaned = removeFillers(cleaned, russianFillers, ::isRussianFiller)
+            cleaned = correctRevision(cleaned, scheduleCorrection, 2)
+            cleaned = correctRevision(cleaned, dateCorrection, 1)
             cleaned = stutter.replace(cleaned) { it.groupValues[2] }
             val beforeRestarts = cleaned
             cleaned = commaRestart.replace(beforeRestarts) { match ->
@@ -75,6 +93,11 @@ internal object DictationCleanup {
                 val comma = match.groupValues[2].takeIf { followingWord(tail) in commaContinuations }.orEmpty()
                 match.groupValues[1] + comma
             }
+        }
+        cleaned = when (language) {
+            "ru" -> russianRestart.replace(cleaned) { it.groupValues[1] }
+            "en" -> englishRestart.replace(cleaned) { it.groupValues[1] }
+            else -> cleaned
         }
         val deduplicated = duplicate.replace(cleaned) { match ->
             val word = match.groupValues[1]
@@ -85,9 +108,15 @@ internal object DictationCleanup {
     }
 
     private fun isRussianPause(phrase: String, left: String, right: String) = when (phrase) {
-        "м" -> isParenthetical(left, right) && followingWord(right).length > 1
+        "м" -> (isParenthetical(left, right) || left.endsWith(',') &&
+            (right.startsWith("...") || right.startsWith('…'))) && followingWord(right).length > 1
         "э", "эм" -> left.endsWith(',') || previousWord(left) !in letterNames
         else -> true
+    }
+
+    private fun correctRevision(text: String, pattern: Regex, replacement: Int) = pattern.replace(text) { match ->
+        if (previousWord(text.substring(0, match.range.first)) == "не") match.value
+        else match.groupValues[replacement]
     }
 
     private fun isRussianFiller(phrase: String, left: String, right: String): Boolean {
@@ -99,13 +128,17 @@ internal object DictationCleanup {
         val firstPersonVerb = firstPersonEndings.any { next.endsWith(it) }
         val narrativeContinuation = next in narrative || firstPersonVerb
         return when (phrase) {
-            "ну", "ну вот", "ну короче" -> next !in nuResponses && previous != "а" && previous != "да" &&
-                (next.isNotEmpty() || phrase == "ну" && right.all { it in " ,.…\t" })
+            "ну", "ну вот", "ну короче" -> previous != "а" && previous != "да" &&
+                ((!start && left.endsWith(',') && next in relativeWords) || next !in nuResponses &&
+                    (next.isNotEmpty() || phrase == "ну" && right.all { it in " ,.…\t" }))
             "короче" -> parenthetical || (start || previous in personalWords) && narrativeContinuation
             "в общем" -> parenthetical || next in generalStatement || firstPersonVerb
             "короче говоря", "так сказать" -> parenthetical || (start || left.endsWith(',')) && right.isNotEmpty()
-            "типа", "как бы", "как бы вот" -> parenthetical || previous in personalWords && narrativeContinuation
+            "типа", "как бы", "как бы вот", "это самое" -> parenthetical ||
+                (previous in personalWords || left.endsWith(',')) && narrativeContinuation
             "значит" -> !start && parenthetical || previous in nonThirdPerson && narrativeContinuation
+            "собственно говоря" -> parenthetical || start && next in personalWords
+            "собственно" -> start && right.startsWith(',') && next in personalWords
             else -> parenthetical && next.isNotEmpty()
         }
     }

@@ -25,8 +25,8 @@ android {
         applicationId = "dev.voicekb.android"
         minSdk = 31
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.1.11"
+        versionCode = 13
+        versionName = "0.1.12"
         ndk { abiFilters += "arm64-v8a" }
         testInstrumentationRunner = "ly.anoma.hex.DeviceChecks"
     }
@@ -50,5 +50,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.emoji2:emoji2-emojipicker:1.7.0")
     implementation("org.pytorch:executorch-android:1.5.1")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
     testImplementation("junit:junit:4.13.2")
 }

@@ -14,6 +14,7 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.UserDictionary
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import android.inputmethodservice.InputMethodService
 import android.view.View
@@ -95,12 +96,17 @@ class HexKeyboard : InputMethodService() {
     // Android's personal dictionary is read off the main thread, and again whenever it changes.
     private val words = Executors.newSingleThreadExecutor { Thread(it, "Hex personal words") }
     private val glideWorker = Executors.newSingleThreadExecutor { Thread(it, "Swipe typing") }
-    private class SwipeLanguage(val words: Map<String, Int>, val pairs: Map<String, Map<String, Int>>) {
+    private class SwipeLanguage(val words: Map<String, Int>, val pairs: Map<String, Map<String, Int>>,
+                                val typing: TypingModel) {
         val geometric by lazy { GlideDecoder(words, pairs) }
         val neural = HashMap<String, FutoSwipeDecoder>()
     }
     private val neuralLanguages = setOf("en", "ru")
     private val swipeLanguages = HashMap<String, SwipeLanguage>()
+    private val typingModels = ConcurrentHashMap<String, TypingModel>()
+    private fun typingModel(language: String): TypingModel = typingModels.computeIfAbsent(language) {
+        TypingModel.asset(assets, it)
+    }
     private val futoModel = lazy { runCatching { FutoSwipeModel(applicationContext) }.getOrNull() }
     private val futo by futoModel
 
@@ -124,21 +130,26 @@ class HexKeyboard : InputMethodService() {
         val learned = feedback.learned(language, LearningMode.Swipe)
         val typed = if (feedback.learnSwipe) feedback.learned(language, LearningMode.Tap) else LearnedWords.Empty
         val context = feedback.learnContext
+        val swears = feedback.suggestSwearWords
         glideWorker.execute {
             val candidates = runCatching {
                 val options = swipeLanguage(language)
+                val preceding = options.typing.context(previous.orEmpty().lowercase())
+                val allow: (String) -> Boolean = { candidate ->
+                    !options.typing.neverSuggest.blocks(candidate.lowercase(), swears, preceding)
+                }
                 val neural = if (language in neuralLanguages) futo else null
                 val neuralWords = if (neural == null) emptyList() else runCatching {
                     val layout = FutoLayout(grid)
                     val decoder = options.neural.getOrPut(layout.letters) {
                         FutoSwipeDecoder(layout.letters, options.words, options.pairs)
                     }
-                    decoder.suggestions(neural.emissions(path, layout), previous, learned, typed, context)
+                    decoder.suggestions(neural.emissions(path, layout), previous, learned, typed, context, allow)
                 }.getOrDefault(emptyList())
-                neuralWords.ifEmpty { options.geometric.suggestions(path, grid, previous, learned, typed, context) }
+                neuralWords.ifEmpty { options.geometric.suggestions(path, grid, previous, learned, typed, context, allow) }
             }.getOrDefault(emptyList())
             mainHandler.post {
-                if (view?.isShown == true && layoutLanguage.layoutCode == language)
+                if (view?.isShown == true && layoutLanguage.layoutCode == language && feedback.suggestSwearWords == swears)
                     engine.insertSwipe(candidates, revision, anchor, language)
             }
         }
@@ -148,14 +159,17 @@ class HexKeyboard : InputMethodService() {
         val pairs = assets.open("glide/${language}_bigrams.txt").bufferedReader().use {
             GlideDecoder.readPairs(it.lineSequence())
         }
-        SwipeLanguage(json.keys().asSequence().associateWith { json.getInt(it) }, pairs)
+        val model = typingModel(language)
+        val words = json.keys().asSequence().associateWith { json.getInt(it) }.toMutableMap()
+        model.addSwipeSpellings(words)
+        SwipeLanguage(words, pairs, model)
     }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val dictionaryChanged = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) = engine.personalWordsChanged()
     }
     internal val engine by lazy {
-        KeyboardEngine(InputConnectionTarget(this), feedback, { layoutLanguage }, { SpatialDecoder(TypingModel.asset(assets, it)) },
+        KeyboardEngine(InputConnectionTarget(this), feedback, { layoutLanguage }, { SpatialDecoder(typingModel(it)) },
             readPersonal = { PersonalWords.read(contentResolver, it) }, background = words)
     }
     private val typingChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -169,7 +183,7 @@ class HexKeyboard : InputMethodService() {
         profile = ScreenProfile.from(resources.configuration)
         getSharedPreferences("typing", MODE_PRIVATE).registerOnSharedPreferenceChangeListener(typingChanged)
         contentResolver.registerContentObserver(UserDictionary.Words.CONTENT_URI, true, dictionaryChanged)
-        capture = MicCapture(LocalSpeech(applicationContext),
+        capture = MicCapture(applicationContext, LocalSpeech(applicationContext),
             update = { phase, note -> view?.status(phase, speechNote(note) ?: idleHint()) },
             meter = { view?.setLevel(it) },
             showPreview = { preview -> view?.showLiveSpeech(preview.takeUnless { engine.secure }) },

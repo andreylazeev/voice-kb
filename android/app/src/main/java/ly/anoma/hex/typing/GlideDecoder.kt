@@ -19,7 +19,7 @@ internal class GlideDecoder(words: Map<String, Int>, private val pairs: Map<Stri
 
     fun suggestions(path: List<KeyPoint>, grid: KeyGrid, previous: String? = null,
                     learned: LearnedWords = LearnedWords.Empty, typed: LearnedWords = LearnedWords.Empty,
-                    learnContext: Boolean = true): List<String> {
+                    learnContext: Boolean = true, allow: (String) -> Boolean = { true }): List<String> {
         if (path.size < 2) return emptyList()
         val width = abs(grid.pitchX).coerceAtLeast(1.0)
         val height = abs(grid.pitchY).coerceAtLeast(1.0)
@@ -48,6 +48,7 @@ internal class GlideDecoder(words: Map<String, Int>, private val pairs: Map<Stri
         for ((start, startError) in first) for ((end, endError) in last) {
             val ends = start to end
             for (word in byEnds[ends].orEmpty() + additional[ends].orEmpty()) {
+                if (!allow(word.text)) continue
                 val ideal = word.keys.mapNotNull(keys::get)
                 if (ideal.size != word.keys.length) continue
                 val idealLength = length(ideal)

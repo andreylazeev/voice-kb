@@ -107,4 +107,23 @@
     <string name="settings_privacy_detail">VoiceKB processes speech and typing on this phone. Personalisation keeps a small vocabulary and word counts on-device.</string>
     <string name="settings_privacy_policy">Privacy policy</string>
     <string name="settings_licences">Open-source licences</string>
+    <string name="cleanup_models_title">Local cleanup models</string>
+    <string name="cleanup_models_basic">Built-in cleanup</string>
+    <string name="cleanup_models_basic_detail">Fast and available without a download</string>
+    <string name="cleanup_models_device">%1$s of RAM. Suggested for your device: %2$s.</string>
+    <string name="cleanup_models_detail">A model edits the final text on your device in Polished mode. The bars show relative device load.</string>
+    <string name="cleanup_model_light">Lightweight</string>
+    <string name="cleanup_model_balanced">Balanced</string>
+    <string name="cleanup_model_heavy">Higher capacity</string>
+    <string name="cleanup_model_recommended">Suggested</string>
+    <string name="cleanup_model_size">%1$s · %2$s download</string>
+    <string name="cleanup_model_verifying">Verifying download…</string>
+    <string name="cleanup_model_progress">Downloading · %1$d%%</string>
+    <string name="cleanup_model_failed">Couldn’t download the model. Check your connection and free storage.</string>
+    <string name="cleanup_model_selected">Selected ✓</string>
+    <string name="cleanup_model_select">Use this model</string>
+    <string name="cleanup_model_delete">Delete</string>
+    <string name="cleanup_model_download">Download</string>
+    <string name="cleanup_model_pause">Pause</string>
+    <string name="cleanup_model_resume">Resume download</string>
 </resources>

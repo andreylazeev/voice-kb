@@ -49,6 +49,13 @@ internal class NeverSuggest(model: TypingModel, source: Reader) {
     // phrase starter outside the model. Most previous words share the same prefix cache.
     fun context(spelling: String, id: Int) = if (id >= 0) id else unknownStarts[spelling] ?: -1
     fun restrictedContext(previous: Int) = if (previous in following) previous else -1
+    val swearWords: Set<String> by lazy { spellings.filterValues { it == SWEAR }.keys }
+    fun swearCompletion(prefix: String): String? {
+        if (prefix.length < 2) return null
+        val extra = if (prefix.length == 2) 1 else 2
+        return swearWords.asSequence().filter { it.length in (prefix.length + 1)..(prefix.length + extra) && it.startsWith(prefix) }
+            .minWithOrNull(compareBy<String> { it.length }.thenBy { it })
+    }
     private fun denied(flag: Byte, swears: Boolean) = flag == SLUR || (!swears && flag == SWEAR)
     fun blocksFollowing(word: Int, swears: Boolean, previous: Int) =
         previous != -1 && denied(following[previous]?.ids?.get(word) ?: 0, swears)

@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         stopObservingTheme = Appearance(this).observe { recreate() }
-        capture = MicCapture(LocalSpeech(applicationContext),
+        capture = MicCapture(applicationContext, LocalSpeech(applicationContext),
             update = { next, reason ->
                 phase = next
                 if (next != SpeechPhase.Listening) voiceLevel.floatValue = 0f

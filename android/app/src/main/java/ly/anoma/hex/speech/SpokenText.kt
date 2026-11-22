@@ -20,14 +20,29 @@ internal object SpokenText {
 
     fun forDictation(raw: String, options: SpeechOptions): String {
         if (options.style == Style.Verbatim) return raw.trim()
-        val language = options.spoken.code
-        val spelled = VocabularySpelling.apply(options.vocabulary, raw)
-        val cleaned = if (options.clean) DictationCleanup.clean(spelled, language) else spelled
-        val normalized = capitalizeSentenceStarts(fixSpacing(collapse(cleaned)))
-        val lines = normalized.split('\n')
+        val lines = dictationBody(raw, options).split('\n')
         val punctuated = if (options.endWithPeriod) lines.joinToString("\n", transform = ::endingSentence)
             else lines.joinToString("\n", transform = ::droppingFinalFullStop)
         return finished(punctuated, options)
+    }
+
+    fun forPreview(raw: LiveSpeech, options: SpeechOptions): LiveSpeech {
+        if (options.style == Style.Verbatim || !options.clean) return raw
+        val text = finished(dictationBody(raw.text, options), options)
+        if (raw.partial.isBlank()) return LiveSpeech(text, "")
+        val committed = finished(dictationBody(raw.committed, options), options)
+        if (text == committed) return LiveSpeech(text, "")
+        if (text.startsWith("$committed ")) return LiveSpeech(committed, text.drop(committed.length + 1))
+        // A new word can repair the tail of the committed text. Only tint the unchanged full words as stable.
+        val boundary = text.commonPrefixWith(committed).lastIndexOf(' ')
+        return if (boundary < 0) LiveSpeech("", text)
+            else LiveSpeech(text.take(boundary), text.drop(boundary + 1))
+    }
+
+    private fun dictationBody(raw: String, options: SpeechOptions): String {
+        val spelled = VocabularySpelling.apply(options.vocabulary, raw)
+        val cleaned = if (options.clean) DictationCleanup.clean(spelled, options.spoken.code) else spelled
+        return capitalizeSentenceStarts(fixSpacing(collapse(cleaned)))
     }
 
     private fun finished(styled: String, options: SpeechOptions): String {

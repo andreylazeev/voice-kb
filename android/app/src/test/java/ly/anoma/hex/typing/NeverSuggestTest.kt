@@ -10,6 +10,21 @@ class NeverSuggestTest {
         return TypingWord(SpatialDecoder(TypingModel.file(file, language)), spatial)
     }
 
+    @Test fun cyrillicProfanityIsOfferedByTheActualStripOnlyAfterOptIn() {
+        for ((language, spelling) in listOf("ru" to "пизда", "ru" to "хуй", "uk" to "пиздець", "uk" to "їбати")) {
+            val w = word(language)
+            w.explicit(spelling.dropLast(1))
+            for (enabled in listOf(false, true, false)) {
+                w.suggestSwearWords = enabled
+                assertEquals("$language $spelling", enabled, w.strip().any { it.text == spelling })
+            }
+        }
+        val russian = word("ru")
+        russian.explicit("пиз")
+        russian.suggestSwearWords = true
+        assertTrue(russian.strip().any { it.text == "пизда" })
+    }
+
     private val grid = KeyGrid(buildMap {
         for ((row, letters) in listOf("qwertyuiop", "asdfghjkl", "zxcvbnm").withIndex())
             for ((i, c) in letters.withIndex()) put(c, KeyPoint(201 + (i - (letters.length - 1) / 2.0) * 39.5, 66.5 + 56 * row))
