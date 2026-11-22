@@ -45,12 +45,12 @@ import ly.anoma.hex.typing.TypingPreferences
 private enum class Page(val title: Int) {
     Home(R.string.app_name), Dictation(R.string.settings_dictation), Keyboard(R.string.settings_keyboard), Privacy(R.string.settings_privacy),
     Language(R.string.settings_dictation_language), Layout(R.string.settings_keyboard_layout), Cleanup(R.string.settings_clean), Theme(R.string.settings_theme), CustomTheme(R.string.theme_custom),
-    Learning(R.string.settings_learning),
+    Learning(R.string.settings_learning), KeyboardHeight(R.string.settings_keyboard_height),
     CleanupModels(R.string.cleanup_models_title),
     Policy(R.string.settings_privacy_policy), Licences(R.string.settings_licences), Licence(R.string.settings_licences);
     val parent get() = when (this) {
         Language, Cleanup, CleanupModels -> Dictation
-        Layout, Theme, Learning -> Keyboard
+        Layout, Theme, Learning, KeyboardHeight -> Keyboard
         CustomTheme -> Theme
         Policy, Licences -> Privacy
         Licence -> Licences
@@ -104,6 +104,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
     val spatial = remember(revision) { typing.spatial }
     val popups = remember(revision) { typing.popups }
     val haptics = remember(revision) { typing.haptics }
+    val dockedHeight = remember(revision) { typing.dockedHeight }
     val learnTyping = remember(revision) { typing.learnTyping }
     val learnSwipe = remember(revision) { typing.learnSwipe }
     val learnContext = remember(revision) { typing.learnContext }
@@ -223,6 +224,9 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                             Entry(stringResource(R.string.settings_keyboard_layout),
                                 if (selectedLayout == null) stringResource(R.string.settings_layout_follows, automatic.label) else null,
                                 selectedLayout?.label ?: stringResource(R.string.settings_automatic), { open(Page.Layout) })
+                            Rule(); Entry(stringResource(R.string.settings_keyboard_height),
+                                value = stringResource(R.string.settings_keyboard_height_percent, dockedHeight),
+                                action = { open(Page.KeyboardHeight) })
                             Rule(); Entry(stringResource(R.string.settings_theme), value = stringResource(appearance.theme.label),
                                 action = { open(Page.Theme) })
                             Rule(); Entry(stringResource(R.string.settings_learning), action = { open(Page.Learning) })
@@ -305,6 +309,17 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                             appearance.saveCustom(colors)
                         }
                     })
+                    Page.KeyboardHeight -> {
+                        Label(stringResource(R.string.settings_keyboard_height_detail), size = 14, muted = true)
+                        Card {
+                            (TypingPreferences.DOCKED_HEIGHT_RANGE step 5).forEachIndexed { index, height ->
+                                if (index != 0) Rule()
+                                Entry(stringResource(R.string.settings_keyboard_height_percent, height),
+                                    value = if (height == dockedHeight) "✓" else "",
+                                    action = { typing.dockedHeight = height; open(Page.Keyboard) })
+                            }
+                        }
+                    }
                     Page.Language, Page.Layout -> Card {
                         val layout = page == Page.Layout
                         // Layouts and dictation languages are separate lists that happen to match today.

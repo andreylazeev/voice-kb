@@ -87,6 +87,9 @@
     <string name="dictation_vocabulary">Custom vocabulary</string>
     <string name="dictation_vocabulary_detail">Spell names and terms your way</string>
     <string name="dictation_vocabulary_hint">One name or term per line</string>
+    <string name="settings_keyboard_height">Keyboard height</string>
+    <string name="settings_keyboard_height_detail">Adjusts key rows in standard, split and one-handed modes.</string>
+    <string name="settings_keyboard_height_percent">%1$d%%</string>
     <string name="settings_keyboard_layout">Keyboard layout</string>
     <string name="settings_layout_follows">Follows dictation · %1$s</string>
     <string name="settings_layout_automatic_detail">Follows your dictation language</string>

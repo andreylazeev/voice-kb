@@ -67,8 +67,11 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     private val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     private var floating = false
     private var floatingRowHeight = 41f
-    private val rowHeight get() = px(when { floating -> floatingRowHeight; landscape -> KeyboardMetrics.ROW_LANDSCAPE; else -> KeyboardMetrics.ROW })
-    private val keyHeight get() = px(when { floating -> floatingRowHeight - 6f; landscape -> KeyboardMetrics.KEY_HEIGHT_LANDSCAPE; else -> KeyboardMetrics.KEY_HEIGHT })
+    private var dockedScale = ime.feedback.dockedHeight / 100f
+    private val rowHeight get() = px(if (floating) floatingRowHeight else
+        (if (landscape) KeyboardMetrics.ROW_LANDSCAPE else KeyboardMetrics.ROW) * dockedScale)
+    private val keyHeight get() = px(if (floating) floatingRowHeight - 6f else
+        (if (landscape) KeyboardMetrics.KEY_HEIGHT_LANDSCAPE else KeyboardMetrics.KEY_HEIGHT) * dockedScale)
     private val insetTop get() = (rowHeight - keyHeight) / 2
     private val insetBottom get() = rowHeight - keyHeight - insetTop
     private val bottomExtra get() = px(when { floating -> 0f; landscape -> KeyboardMetrics.BOTTOM_LANDSCAPE; else -> KeyboardMetrics.BOTTOM })
@@ -266,8 +269,20 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     fun setFloatingRowHeight(value: Float): Boolean {
         if (floatingRowHeight == value) return false
         val previous = rowHeight
+        val previousKeyHeight = keyHeight
         floatingRowHeight = value
-        if (!floating || previous == rowHeight) return false
+        return floating && updateRowHeights(previous, previousKeyHeight)
+    }
+
+    fun setDockedHeight(percent: Int): Boolean {
+        val previous = rowHeight
+        val previousKeyHeight = keyHeight
+        dockedScale = percent / 100f
+        return !floating && updateRowHeights(previous, previousKeyHeight)
+    }
+
+    private fun updateRowHeights(previous: Int, previousKeyHeight: Int): Boolean {
+        if (previous == rowHeight && previousKeyHeight == keyHeight) return false
         for (row in listOf(bottom, emojiBottom)) {
             row.spacing(gap, insetTop, insetBottom + bottomExtra)
             row.layoutParams = row.layoutParams.apply { height = rowHeight + bottomExtra }

@@ -176,7 +176,13 @@ class HexKeyboard : InputMethodService() {
             readPersonal = { PersonalWords.read(contentResolver, it) }, background = words)
     }
     private val typingChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == TypingPreferences.SUGGEST_SWEAR_WORDS) engine.swearWordsChanged()
+        when (key) {
+            TypingPreferences.SUGGEST_SWEAR_WORDS -> engine.swearWordsChanged()
+            TypingPreferences.DOCKED_HEIGHT -> {
+                view?.cancelGestures()
+                view?.setDockedHeight(feedback.dockedHeight)
+            }
+        }
     }
     internal val previewAllowed get() = !engine.secure
 

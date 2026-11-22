@@ -14,6 +14,9 @@ internal class TypingPreferences(context: Context) {
     var autoCapitalize: Boolean
         get() = prefs.getBoolean("autoCapitalize", true)
         set(value) { prefs.edit().putBoolean("autoCapitalize", value).apply() }
+    var dockedHeight: Int
+        get() = prefs.getInt(DOCKED_HEIGHT, DEFAULT_DOCKED_HEIGHT).coerceIn(DOCKED_HEIGHT_RANGE)
+        set(value) { prefs.edit().putInt(DOCKED_HEIGHT, value.coerceIn(DOCKED_HEIGHT_RANGE)).apply() }
     var autocorrect: Boolean
         get() = prefs.getBoolean("autocorrect", true)
         set(value) { prefs.edit().putBoolean("autocorrect", value).apply() }
@@ -74,5 +77,10 @@ internal class TypingPreferences(context: Context) {
         val key = pair(language, original, replacement)
         prefs.edit().putInt(key, (prefs.getInt(key, 0) + 1).coerceAtMost(2)).apply()
     }
-    companion object { const val SUGGEST_SWEAR_WORDS = "suggestSwearWords" }
+    companion object {
+        const val SUGGEST_SWEAR_WORDS = "suggestSwearWords"
+        const val DOCKED_HEIGHT = "dockedHeight"
+        const val DEFAULT_DOCKED_HEIGHT = 100
+        val DOCKED_HEIGHT_RANGE = 80..120
+    }
 }

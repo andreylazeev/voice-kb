@@ -116,6 +116,12 @@ internal class KeyboardView(context: Context, private val ime: HexKeyboard) : Li
             menu.layoutParams = menu.layoutParams.apply { this.height = keys.menuHeight }
         }
     }
+    fun setDockedHeight(percent: Int) {
+        if (keys.setDockedHeight(percent)) {
+            menu.layoutParams = menu.layoutParams.apply { height = keys.menuHeight }
+        }
+    }
+
     fun showDraft(text: String?) {
         draftText.text = text.orEmpty()
         draft.visibility = if (text.isNullOrBlank()) GONE else VISIBLE

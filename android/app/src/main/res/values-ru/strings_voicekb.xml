@@ -77,6 +77,9 @@
     <string name="dictation_language_automatic_detail">По раскладке или языку телефона</string>
     <string name="settings_clean">Очистка диктовки</string>
     <string name="settings_clean_detail">Перед вставкой убирает запинки, случайные повторы и слова-паразиты по контексту</string>
+    <string name="settings_keyboard_height">Высота клавиатуры</string>
+    <string name="settings_keyboard_height_detail">Меняет высоту рядов в обычном, раздельном и одноручном режимах.</string>
+    <string name="settings_keyboard_height_percent">%1$d%%</string>
     <string name="settings_keyboard_layout">Раскладка</string>
     <string name="settings_layout_follows">По языку диктовки · %1$s</string>
     <string name="settings_layout_automatic_detail">По языку диктовки</string>
