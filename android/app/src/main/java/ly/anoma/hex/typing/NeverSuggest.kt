@@ -2,11 +2,12 @@ package ly.anoma.hex.typing
 
 import java.io.Reader
 
-/** These are output flags, not dictionary deletions. Index only the small curated list;
- * beam search and completion scans check a byte without decoding every spelling. */
+/** These are output flags, not dictionary deletions. Beam search and completion scans
+ * check a byte without decoding every spelling. */
 internal class NeverSuggest(model: TypingModel, source: Reader) {
     private val wordFlags = ByteArray(model.words)
     private val spellings = HashMap<String, Byte>() // Also protects literals outside HXTM.
+    private val swearRanks = HashMap<String, Int>()
     private class Following {
         val ids = HashMap<Int, Byte>()
         val spellings = HashMap<String, Byte>()
@@ -18,7 +19,8 @@ internal class NeverSuggest(model: TypingModel, source: Reader) {
         source.buffered().useLines { lines ->
             for (line in lines) {
                 if (line.isBlank() || line.startsWith('#')) continue
-                val (language, kind, spelling) = line.split('\t')
+                val fields = line.split('\t')
+                val (language, kind, spelling) = fields
                 if (language != "*" && language != model.language) continue
                 val flag: Byte = when (kind) {
                     "swear" -> SWEAR
@@ -28,6 +30,7 @@ internal class NeverSuggest(model: TypingModel, source: Reader) {
                 val space = spelling.indexOf(' ')
                 if (space < 0) {
                     spellings[spelling] = flag
+                    if (flag == SWEAR) fields.getOrNull(3)?.toInt()?.let { swearRanks[spelling] = it }
                     val id = model.index(spelling)
                     if (id >= 0) wordFlags[id] = flag
                 } else {
@@ -50,11 +53,15 @@ internal class NeverSuggest(model: TypingModel, source: Reader) {
     fun context(spelling: String, id: Int) = if (id >= 0) id else unknownStarts[spelling] ?: -1
     fun restrictedContext(previous: Int) = if (previous in following) previous else -1
     val swearWords: Set<String> by lazy { spellings.filterValues { it == SWEAR }.keys }
+    private val sortedSwears by lazy { swearWords.sorted() }
+    fun swearRank(spelling: String, fallback: Int = 177) = maxOf(swearRanks[spelling] ?: fallback, fallback)
     fun swearCompletion(prefix: String): String? {
         if (prefix.length < 2) return null
         val extra = if (prefix.length == 2) 1 else 2
-        return swearWords.asSequence().filter { it.length in (prefix.length + 1)..(prefix.length + extra) && it.startsWith(prefix) }
-            .minWithOrNull(compareBy<String> { it.length }.thenBy { it })
+        val start = sortedSwears.binarySearch(prefix).let { if (it >= 0) it else -it - 1 }
+        return sortedSwears.subList(start, sortedSwears.size).asSequence().takeWhile { it.startsWith(prefix) }
+            .filter { it.length in (prefix.length + 1)..(prefix.length + extra) }
+            .minWithOrNull(compareByDescending<String> { swearRank(it) }.thenBy { it.length }.thenBy { it })
     }
     private fun denied(flag: Byte, swears: Boolean) = flag == SLUR || (!swears && flag == SWEAR)
     fun blocksFollowing(word: Int, swears: Boolean, previous: Int) =

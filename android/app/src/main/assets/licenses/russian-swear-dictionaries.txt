@@ -1,0 +1,18 @@
+Russian profanity vocabulary for VoiceKB
+
+BadWords by FlacSy and contributors, from its Russian word list:
+https://github.com/FlacSy/BadWords/blob/48e2827b6ff77177a6b353e94ca3999f39e4a82c/rust/badwords-core/resources/words/ru.txt
+MIT License and upstream acknowledgements: badwords-mit.txt and badwords-notice.txt.
+BadWords lists CC BY 4.0 contributions to its Russian list from List of Dirty, Naughty,
+Obscene and Otherwise Bad Words, © Shutterstock, Inc., and contributors.
+Source: https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words
+Licence: cc-by-4.0.txt, https://creativecommons.org/licenses/by/4.0/
+
+djantimat by Ivan Sergeev, from its Russian dictionary fixture:
+https://github.com/PixxxeL/djantimat/blob/c6aa6540ff01bf643ec39cad7fdeec3c2cd560fc/djantimat/fixtures/initial_data.json
+MIT License: djantimat-mit.txt.
+
+VoiceKB modifications: selected single Cyrillic words with unambiguous profanity stems,
+lowercased and deduplicated both lists, excluded ambiguous spellings and slur compounds,
+and filled in past-tense forms of common verbs. The merged entries feed both tap and
+swipe vocabularies and use the existing opt-in for profanity suggestions.

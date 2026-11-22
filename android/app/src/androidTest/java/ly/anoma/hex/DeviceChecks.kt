@@ -109,18 +109,23 @@ class DeviceChecks : Instrumentation() {
                     summary.putString("${lang}_futo", recognized.joinToString())
                     summary.putLong("${lang}_futo_ms", android.os.SystemClock.elapsedRealtime() - started)
                     check(expected in recognized) { "$lang FUTO did not recognize '$expected': $recognized" }
-                    val swear = if (lang == "ru") "пизда" else "fuck"
-                    val taps = TypingWord(SpatialDecoder(typing), spatial = false)
-                    taps.explicit(swear.dropLast(1))
-                    val points = swear.mapIndexed { index, letter -> centres.getValue(letter).copy(timeMillis = index * 75L) }
-                    val emissions = model.emissions(points, layout)
-                    for (enabled in listOf(false, true)) {
-                        taps.suggestSwearWords = enabled
-                        check(taps.strip().any { it.text == swear } == enabled) { "$lang tap opt-in: $enabled" }
-                        val swipe = decoder.suggestions(emissions, null, LearnedWords.Empty, LearnedWords.Empty, false) {
-                            !typing.neverSuggest.blocks(it.lowercase(), enabled, -1)
+                    val swears = if (lang == "ru") listOf("пизда", "ахуенно", "охуенно", "проебался") else listOf("fuck")
+                    for (swear in swears) {
+                        val taps = TypingWord(SpatialDecoder(typing), spatial = false)
+                        taps.explicit(swear.dropLast(1))
+                        val points = swear.mapIndexed { index, letter -> centres.getValue(letter).copy(timeMillis = index * 75L) }
+                        val emissions = model.emissions(points, layout)
+                        for (enabled in listOf(false, true)) {
+                            taps.suggestSwearWords = enabled
+                            check(taps.strip().any { it.text == swear } == enabled) { "$lang $swear tap opt-in: $enabled" }
+                            val swipe = decoder.suggestions(emissions, null, LearnedWords.Empty, LearnedWords.Empty, false) {
+                                !typing.neverSuggest.blocks(it.lowercase(), enabled, -1)
+                            }
+                            check((swear in swipe) == enabled) { "$lang $swear swipe opt-in: $enabled, candidates: $swipe" }
+                            if (enabled && swear in listOf("ахуенно", "охуенно", "проебался")) {
+                                check(swipe.first() == swear) { "Expected $swear first, candidates: $swipe" }
+                            }
                         }
-                        check((swear in swipe) == enabled) { "$lang swipe opt-in: $enabled, candidates: $swipe" }
                     }
                     summary.putString("${lang}_swear_opt_in", "tap and swipe OK")
                 }

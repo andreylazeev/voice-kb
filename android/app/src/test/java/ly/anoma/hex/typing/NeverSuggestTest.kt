@@ -5,6 +5,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NeverSuggestTest {
+    @Test fun extendedRussianVocabularyFeedsBothTapAndSwipeWithOptIn() {
+        val w = word("ru", spatial = false)
+        val model = w.decoder.model
+        val swipe = mutableMapOf<String, Int>()
+        model.addSwipeSpellings(swipe)
+        for (spelling in listOf("ахуенно", "охуенно", "проебался", "проёбалась", "заебались", "ебанулся", "долбоёб")) {
+            assertTrue("$spelling in HXTM", model.index(spelling) >= 0)
+            assertTrue("$spelling in swipe", spelling in swipe)
+            assertTrue(model.neverSuggest.blocks(spelling, false, -1))
+            assertFalse(model.neverSuggest.blocks(spelling, true, -1))
+        }
+        for (literal in listOf("застрахуй", "подстрахуй", "колебался", "учеба", "мандарин", "мандат")) {
+            assertFalse(literal, model.neverSuggest.blocks(literal, false, -1))
+        }
+    }
+
     private fun word(language: String = "en", spatial: Boolean = true): TypingWord {
         val file = File("src/main/assets/typing/$language.hextm")
         return TypingWord(SpatialDecoder(TypingModel.file(file, language)), spatial)
