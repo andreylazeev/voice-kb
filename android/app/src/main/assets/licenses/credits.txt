@@ -1,3 +1,10 @@
+VoiceKB is free software. You may redistribute and modify the VoiceKB program under the
+GNU General Public License, version 3 or any later version. See tinyasr-GPL-3.0.txt for the
+license text. Corresponding source: https://github.com/andreylazeev/voice-kb
+
+VoiceKB is based on Hex by Christopher Langton. See hex-mit.txt for the original MIT notice.
+Third-party models and data are distributed under their accompanying terms.
+
 Whisper model weights by OpenAI; Q5_1 conversion distributed by Georgi Gerganov. MIT.
 whisper.cpp and ggml by Georgi Gerganov and contributors. MIT.
 Kotlin and AndroidX: Apache License 2.0. LLVM libc++: Apache 2.0 with LLVM exceptions.

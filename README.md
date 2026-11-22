@@ -38,6 +38,8 @@ rustup target add aarch64-linux-android
 
 ## Исходники и лицензии
 
+Код VoiceKB и сборка приложения с tinyasr распространяются по GNU GPL версии 3 или любой более поздней (`GPL-3.0-or-later`). У сторонних компонентов и данных сохраняются их лицензии и уведомления. [LICENSE](LICENSE)
+
 - Android-клавиатура основана на [Hex от Anomaly](https://github.com/anomalyco/hex/tree/9588830c7e01523d56b4e8eeb0a3817f6dc2dd91/android). [MIT](android/LICENSE)
 - Локальная диктовка использует [tinyasr](https://github.com/dkaraush/tinyasr) и модель en-ru-uk. Исходники движка и текст GPL‑3.0‑or‑later доступны в [android/vendor/tinyasr](android/vendor/tinyasr).
 - Русский и английский свайп используют [FUTO Swipe](https://huggingface.co/futo-org/futo-swipe) и [ExecuTorch](https://github.com/pytorch/executorch). Веса энкодера распространяются на условиях [FUTO Model Weights License 1.0](android/app/src/main/assets/licenses/futo-model-weights.md).
