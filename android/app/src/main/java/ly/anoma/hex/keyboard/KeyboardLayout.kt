@@ -107,8 +107,8 @@ internal object KeyboardMetrics {
 
     // The bottom row, in tenths. The language key occupies one cell of SPACE.
     const val MODE = 1.5f
-    const val COMMA = 1.5f
-    const val SPACE = 4.5f
+    const val COMMA = 1f
+    const val SPACE = 5f
     const val PERIOD = 1f
     const val ENTER = 1.5f
     /** Maximum emoji cell pitch in dp to limit scaling of the picker's glyph bitmaps. */

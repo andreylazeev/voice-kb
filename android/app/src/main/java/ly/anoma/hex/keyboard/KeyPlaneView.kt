@@ -169,7 +169,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         bottomSlides[comma] = { ime.engine.type(commaText) }
         emojiHint.setImageResource(R.drawable.ic_emoji)
         emojiHint.imageTintList = ColorStateList.valueOf(quiet)
-        comma.face.addView(emojiHint, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.TOP or Gravity.END).apply {
+        comma.face.addView(emojiHint, FrameLayout.LayoutParams(dp(14), dp(14), Gravity.TOP or Gravity.END).apply {
             topMargin = dp(2)
             marginEnd = dp(4)
         })
