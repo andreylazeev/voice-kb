@@ -105,11 +105,10 @@ internal object KeyboardMetrics {
     /** Gboard ticks again as a key lifts when it was held at least this long. */
     const val RELEASE_TICK_MS = 200L
 
-    // The bottom row, in tenths: ?123, comma, emoji, space, period, enter (Gboard's with its emoji key).
+    // The bottom row, in tenths. The language key occupies one cell of SPACE.
     const val MODE = 1.5f
-    const val COMMA = 1f
-    const val EMOJI = 1f
-    const val SPACE = 4f
+    const val COMMA = 1.5f
+    const val SPACE = 4.5f
     const val PERIOD = 1f
     const val ENTER = 1.5f
     /** The emoji grid's cell, as Gboard's (a 45 dp row pitch, nine across in portrait). */

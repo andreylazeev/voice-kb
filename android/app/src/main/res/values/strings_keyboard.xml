@@ -47,7 +47,7 @@
     <string name="keyboard_more_symbols">More symbols</string>
     <string name="keyboard_pad_symbols" translatable="false">!?#</string>
     <string name="keyboard_pad">Number pad</string>
-    <string name="keyboard_pad_label" translatable="false">12\n34</string>
+    <string name="keyboard_pad_label" translatable="false">1234</string>
     <string name="keyboard_phone_symbols">Phone symbols</string>
     <string name="keyboard_phone_keypad">Phone keypad</string>
     <string name="keyboard_symbols">Symbols</string>

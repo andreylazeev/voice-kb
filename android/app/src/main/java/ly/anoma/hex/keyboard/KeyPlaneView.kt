@@ -43,7 +43,7 @@ import ly.anoma.hex.typing.TypingWord
 import ly.anoma.hex.useInter
 import kotlin.math.roundToInt
 
-/** The keys: three rows from the page's layout, then ?123, comma, space, period and enter. Every
+/** The keys: three rows from the page's layout, then ?123, comma, language, space, period and enter. Every
  * point of the area types a key (KeyRowLayout); the bottom row stays mounted across page changes.
  * Keys that type as they lift do so in the order the fingers went down ([Rollover]). */
 internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, private val host: KeyboardView,
@@ -91,7 +91,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
-    private var pendingAccents: Runnable? = null
+    private var pendingHold: Runnable? = null
     private val rows = LinearLayout(context)
     private val bottom = KeyRowLayout(context, 10f, side, gap, insetTop, insetBottom + bottomExtra)
     private val modeKey: KeyCap
@@ -100,7 +100,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     private val spaceKey: KeyCap
     private var deleteKey: KeyCap? = null
     private val comma: KeyCap
-    private val emojiKey: KeyCap
+    private val emojiHint = ImageView(context)
     private val period: KeyCap
     // The emoji panel: AndroidX's picker where the strip and the letter rows are, then ABC, space and delete.
     private var picker: EmojiPickerView? = null
@@ -160,17 +160,18 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             true
         }
         comma = caps.cap(",", context.getString(R.string.keyboard_comma), modifier) { ime.engine.type(commaText) }
-        typesOnLift(comma, preview = { null }, holds = { emptyList() }, type = { comma.performClick() })
+        comma.setOnLongClickListener {
+            if (current?.symbols == true) ime.engine.pad(Pad.Symbols) else host.openEmoji()
+            true
+        }
+        typesOnLift(comma, preview = { null }, holds = { emptyList() }, activateOnHold = true, type = { comma.performClick() })
         bottomSlides[comma] = { ime.engine.type(commaText) }
-        // Emoji on the letters; on the symbol pages Gboard's 1234 key, which opens its number pad.
-        emojiKey = caps.icon(R.drawable.ic_emoji, context.getString(R.string.keyboard_emoji), caps.key,
-            { if (current?.symbols == true) ime.engine.pad(Pad.Symbols) else host.openEmoji() })
-        emojiKey.face.addView(TextView(context).apply {
-            text = context.getString(R.string.keyboard_pad_label); textSize = 13f; useInter(500); setTextColor(ink)
-            gravity = Gravity.CENTER; includeFontPadding = false; setLineSpacing(0f, 0.9f); visibility = GONE
-        }, FrameLayout.LayoutParams(-1, -1))
-        emojiKey.textEntry = false
-        typesOnLift(emojiKey, preview = { null }, holds = { emptyList() }, type = { emojiKey.performClick() })
+        emojiHint.setImageResource(R.drawable.ic_emoji)
+        emojiHint.imageTintList = ColorStateList.valueOf(quiet)
+        comma.face.addView(emojiHint, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(2)
+            marginEnd = dp(4)
+        })
         spaceKey = caps.cap("", context.getString(R.string.keyboard_space), caps.key, 14f) {
             ime.engine.space(spacePoint, if (current?.symbols == false) geometry() else null); spacePoint = null
         }
@@ -229,7 +230,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         val languageKey = caps.icon(R.drawable.ic_language, context.getString(R.string.keyboard_switch_layout), modifier, ime::toggleLayout)
         typesOnLift(languageKey, preview = { null }, holds = { emptyList() }, type = { languageKey.performClick() })
         var at = 0f
-        for ((key, width) in listOf(modeKey to KeyboardMetrics.MODE, comma to KeyboardMetrics.COMMA, emojiKey to KeyboardMetrics.EMOJI,
+        for ((key, width) in listOf(modeKey to KeyboardMetrics.MODE, comma to KeyboardMetrics.COMMA,
                 languageKey to 1f, spaceKey to (KeyboardMetrics.SPACE - 1f), period to KeyboardMetrics.PERIOD, enterKey to KeyboardMetrics.ENTER)) { bottom.add(key, at, width); at += width }
         // Gboard's emoji panel ends with ABC and delete; Hex puts a space bar between them.
         val letters = caps.cap(context.getString(R.string.keyboard_letters_label), context.getString(R.string.keyboard_letters),
@@ -386,9 +387,9 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             }
             if (index == 2) deleteKey = newDeleteKey().also { row.add(it, columns - side, side) }
         }
-        (emojiKey.face.getChildAt(0)).visibility = if (symbols) GONE else VISIBLE
-        (emojiKey.face.getChildAt(1)).visibility = if (symbols) VISIBLE else GONE
-        emojiKey.contentDescription = context.getString(if (symbols) R.string.keyboard_pad else R.string.keyboard_emoji)
+        emojiHint.visibility = if (symbols) GONE else VISIBLE
+        comma.hint(if (symbols) context.getString(R.string.keyboard_pad_label) else null)
+        comma.longClickLabel = context.getString(if (symbols) R.string.keyboard_pad else R.string.keyboard_emoji)
         modeKey.label?.text = context.getString(if (symbols) R.string.keyboard_letters_label else R.string.keyboard_numbers_label)
         modeKey.contentDescription = context.getString(if (symbols) R.string.keyboard_letters else R.string.keyboard_numbers)
         commaText = if (symbols) "," else page.kind.mark
@@ -604,11 +605,11 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         item?.performClick()
     }
 
-    /** Touches for a key that types as it lifts: pressed, its pop-up, after [KeyboardMetrics.HOLD_MS] its held
-     * options to slide over, and on lifting (or when another key goes down first) [type] with the option
-     * chosen, or null for the key's own. */
+    /** A held key either opens its long-click action or shows options to choose from. Otherwise it
+     * types on lifting or when another key goes down first. */
     private fun typesOnLift(k: KeyCap, preview: () -> String?, holds: () -> List<List<String>>, default: () -> Int = { 0 },
-                            down: (MotionEvent) -> Unit = {}, type: (String?) -> Unit, done: () -> Unit = {}) {
+                            down: (MotionEvent) -> Unit = {}, activateOnHold: Boolean = false,
+                            type: (String?) -> Unit, done: () -> Unit = {}) {
         fun finish(): Boolean {
             val option = if (feedback.choosing) feedback.selected() else null
             val pressed = k.isPressed; k.isPressed = false; clearCallout()
@@ -627,9 +628,15 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                     val shown = preview()
                     if (shown != null && ime.feedback.popups && ime.previewAllowed) feedback.present(k.face, listOf(shown))
                     val options = holds()
-                    if (options.firstOrNull().isNullOrEmpty().not()) {
-                        pendingAccents = Runnable { if (v.isPressed) feedback.hold(k.face, options, default()) }
-                        postDelayed(pendingAccents!!, KeyboardMetrics.HOLD_MS)
+                    if (activateOnHold || !options.firstOrNull().isNullOrEmpty()) {
+                        val hold = Runnable {
+                            if (v.isPressed && activateOnHold) {
+                                v.isPressed = false
+                                v.performLongClick()
+                            } else if (v.isPressed) feedback.hold(k.face, options, default())
+                        }
+                        pendingHold = hold
+                        postDelayed(hold, KeyboardMetrics.HOLD_MS)
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -865,7 +872,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         grid = null
     }
     fun clearCallout() {
-        pendingAccents?.let(::removeCallbacks); pendingAccents = null; feedback.clear()
+        pendingHold?.let(::removeCallbacks); pendingHold = null; feedback.clear()
     }
     fun refreshSpace() {
         val next = ime.preferences.options(ime.nextEnglish)
@@ -878,6 +885,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     fun cancelGestures() {
         clearTrail(); clearCallout(); endSlide(); roll.clear()
         removeCallbacks(repeatDelete); removeCallbacks(switchLanguage)
+        comma.isPressed = false
         spaceKey.isPressed = false
         deleting = false
         deleteKey?.isPressed = false
