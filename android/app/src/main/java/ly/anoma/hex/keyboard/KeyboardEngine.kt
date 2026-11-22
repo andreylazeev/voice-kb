@@ -437,7 +437,12 @@ internal class KeyboardEngine(
         if (last != null && endsWith(last.replacement + " ") && replace(last.replacement + " ", last.original)) {
             feedback.undo(last.language, last.original, last.replacement)
             val typed = last.original.substringAfterLast(' ')
-            prefix = before().dropLast(typed.length).takeLast(40); word?.restored(typed, prefix)
+            val beforeTyped = before().dropLast(typed.length)
+            prefix = beforeTyped.takeLast(40)
+            word?.let {
+                it.restored(typed, prefix)
+                learnTyped(it, typed, previousForLearning(beforeTyped), explicit = true)
+            }
             if (expectedCaret >= 0) expectedCaret += last.original.length - last.replacement.length - 1
             surface?.suggestions(listOf(Suggestion(typed, Suggestion.Kind.Typed))); return
         }
@@ -497,7 +502,7 @@ internal class KeyboardEngine(
     fun clearForDictation() { edited(); resetTyping(); clearSpaces(); surface?.suggestions(emptyList()) }
 
     /** The editor or the keyboard went away: forget the word, never carry it to the next field. */
-    fun leave() { edited(); resetTyping(); clearSpaces(); word = null; surface?.suggestions(emptyList()) }
+    fun leave() { edited(confirmSwipe = true); resetTyping(); clearSpaces(); word = null; surface?.suggestions(emptyList()) }
 
     /** Add any missing separators at the cursor. Verbatim keeps the model's capitalization. */
     fun insertDictation(text: String, language: String?, literal: Boolean = false): Boolean {

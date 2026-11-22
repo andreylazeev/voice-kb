@@ -1,0 +1,15 @@
+Russian swipe and typing vocabulary supplement
+
+Ilya Koziev, NLP_Datasets, WordformFrequencies, CC0 1.0 Universal.
+https://github.com/Koziev/NLP_Datasets/tree/85d7cbdf41d8b62bbd385aaab2920bc9c4b4f63f/WordformFrequencies
+The source archive contains wordform frequencies by part of speech.
+See cc0-1.0.txt.
+
+Danakt, russian-words, MIT.
+https://github.com/danakt/russian-words/tree/d68c007fe9260d2d40ce413f13f77335c5af1e62
+The source spelling list validates lower-frequency candidates.
+See danakt-russian-words-mit.txt.
+
+VoiceKB sums frequencies across parts of speech, keeps single Cyrillic words,
+and adds selected modern names, inflections and conversational forms.
+The supplement is shared by tap typing and both Russian swipe decoders.

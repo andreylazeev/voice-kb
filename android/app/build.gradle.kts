@@ -25,8 +25,8 @@ android {
         applicationId = "dev.voicekb.android"
         minSdk = 31
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.1.13"
+        versionCode = 15
+        versionName = "0.1.14"
         ndk { abiFilters += "arm64-v8a" }
         testInstrumentationRunner = "ly.anoma.hex.DeviceChecks"
     }

@@ -42,6 +42,9 @@ internal class TypingPreferences(context: Context) {
     fun learned(language: String, mode: LearningMode): LearnedWords =
         if (learningEnabled(mode)) learning.snapshot(language, mode) else LearnedWords.Empty
 
+    fun learningReports() = learning.reports()
+    fun observeLearning(changed: () -> Unit) = learning.observe(changed)
+
     fun learn(language: String, mode: LearningMode, word: String, previous: String?,
               explicit: Boolean = false, replaced: String? = null) {
         if (learningEnabled(mode)) learning.record(language, mode, word, previous.takeIf { learnContext }, replaced, explicit)

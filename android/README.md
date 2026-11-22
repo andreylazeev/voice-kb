@@ -20,6 +20,22 @@ adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.
 adb shell am instrument -w dev.voicekb.android.test/ly.anoma.hex.DeviceChecks
 ```
 
+### Проверка русского свайпа
+
+Для повтора нужны `valid.jsonl` и `valid.ref` из полного набора NeuroSwipe 2023. Кодирование жестов выполняется на ARM64 с установленной клавиатурой и тестовым APK. [Данные Yandex Cup](https://disk.yandex.ru/d/IYiSpLob-zAxqg)
+
+```sh
+python3 scripts/prepare-russian-swipe-replay.py valid.jsonl valid.ref /tmp/gestures.jsonl
+adb shell mkdir -p /sdcard/Android/data/dev.voicekb.android/files/swipe-benchmark
+adb push /tmp/gestures.jsonl /sdcard/Android/data/dev.voicekb.android/files/swipe-benchmark/
+adb shell am instrument -w -e swipe_benchmark true dev.voicekb.android.test/ly.anoma.hex.DeviceChecks
+adb pull /sdcard/Android/data/dev.voicekb.android/files/swipe-benchmark/emissions.bin /tmp/emissions.bin
+VOICEKB_SWIPE_EMISSIONS=/tmp/emissions.bin VOICEKB_SWIPE_PARTITION=validation \
+  ./gradlew :app:testDebugUnitTest --rerun --tests '*RussianSwipeQualityTest'
+```
+
+Результаты выводятся в отчёте `app/build/reports/tests/testDebugUnitTest/index.html`. `calibration` выбирает 3 000 жестов для настройки, `validation` выбирает оставшиеся 7 000.
+
 ## Release APK
 
 `assembleRelease` создаёт неподписанный APK. Пример подписи собственным ключом для новой установки. Команды предполагают, что `zipalign` и `apksigner` из Android Build Tools доступны в `PATH`.

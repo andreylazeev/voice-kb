@@ -63,6 +63,7 @@ English and Russian swipe typing powered by FUTO Swipe. The unmodified honorable
 ExecuTorch by the PyTorch contributors. See executorch.txt.
 
 The extended Russian profanity vocabulary uses BadWords and djantimat. See russian-swear-dictionaries.txt for source revisions, licences and VoiceKB changes.
+The Russian general vocabulary supplement uses word frequencies by Ilya Koziev and the Danakt spelling list. See russian-swipe-vocabulary.txt.
 
 Local transcript cleanup uses Google LiteRT-LM (Apache License 2.0).
 Optional, separately downloaded weights: Qwen3.5-0.8B, Gemma 4 E2B and Gemma 4 E4B (Apache License 2.0).

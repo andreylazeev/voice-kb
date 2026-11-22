@@ -29,6 +29,15 @@ class FutoSwipeDecoderTest {
         assertEquals("всё", decoder.suggestions(emissions, null, learned, LearnedWords.Empty, false).first())
     }
 
+    @Test fun matchingNewPersonalWordIsConsideredEvenWhenManyOtherWordsHaveHigherUsage() {
+        val decoder = FutoSwipeDecoder("abcdefghijklmnopqrstuvwxyz", mapOf("ab" to 190), emptyMap())
+        val frequent = ('a'..'z').flatMap { first -> ('a'..'c').map { second -> "a$first${second}a" } }
+        var typed = LearnedWords.Empty.record("cd", null, null, explicit = true)
+        for (word in frequent) repeat(4) { typed = typed.record(word, null, null, explicit = true) }
+        val scores = emissions(listOf(setOf(2), setOf(3), setOf(3)))
+        assertEquals("cd", decoder.suggestions(scores, null, LearnedWords.Empty, typed, false).first())
+    }
+
     private fun emissions(keys: List<Set<Int>>): FloatArray =
         FloatArray(FutoLayout.STEPS * FutoLayout.CLASSES) { index ->
             val step = index / FutoLayout.CLASSES

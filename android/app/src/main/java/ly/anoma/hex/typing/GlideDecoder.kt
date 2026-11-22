@@ -138,6 +138,17 @@ internal class GlideDecoder(words: Map<String, Int>, private val pairs: Map<Stri
     private fun distance(a: KeyPoint, b: KeyPoint) = hypot(a.x - b.x, a.y - b.y)
 
     companion object {
+        fun addVocabulary(words: MutableMap<String, Int>, rows: Sequence<String>) {
+            for (row in rows) {
+                val separator = row.lastIndexOf('\t')
+                if (separator < 1) continue
+                val rank = row.substring(separator + 1).toIntOrNull() ?: continue
+                val word = row.substring(0, separator)
+                val lower = word.lowercase()
+                val original = if (word == lower) words[lower] else words.remove(lower)
+                words[word] = maxOf(rank, original ?: 0, words[word] ?: 0)
+            }
+        }
         private const val SAMPLES = 32
         private const val FINALISTS = 36
         private const val ALIGNMENT_BAND = 8

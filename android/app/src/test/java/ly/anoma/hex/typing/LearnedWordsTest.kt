@@ -30,8 +30,26 @@ class LearnedWordsTest {
         assertEquals(mapOf("зорбекс" to 1), words.preferencesAgainst("зверь"))
         assertFalse(words.encode().contains("зверь"))
         words = LearnedWords.decode(words.encode())
+        assertEquals(1, words.contextCount)
+        assertEquals(1, words.correctionCount)
         assertEquals(mapOf("зорбекс" to 1), words.preferencesAgainst("зверь"))
         assertEquals(listOf("зорбекс"), words.following("Я"))
+    }
+
+    @Test fun wordLearnedBySwipeCompletesTapInput() {
+        val model = TypingModel.file(File("src/main/assets/typing/ru.hextm"), "ru")
+        val stats = LearnedWords.Empty.record("зорбекс", null, null, explicit = true)
+        val typing = TypingWord(SpatialDecoder(model), spatial = false, learnedFromSwipe = { stats })
+        typing.explicit("зор")
+        assertTrue(typing.strip(autocorrect = false).any { it.text == "зорбекс" })
+    }
+
+    @Test fun russianTypingModelIncludesConversationAndModernNames() {
+        val model = TypingModel.file(File("src/main/assets/typing/ru.hextm"), "ru")
+        for (word in listOf("клаве", "свайпом", "яндекс", "яндексе")) assertTrue(word, model.index(word) >= 0)
+        val typing = TypingWord(SpatialDecoder(model), spatial = false)
+        typing.explicit("яндек")
+        assertTrue(typing.strip(autocorrect = false).any { it.text == "Яндекс" })
     }
 
     @Test fun rejectsPhrasesAndDoesNotTreatOneUnconfirmedUseAsVocabulary() {

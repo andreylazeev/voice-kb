@@ -27,6 +27,17 @@ def model(language, alphabet):
         word = text.lower().replace("’", "'")
         if 1 <= len(word) <= 32 and all(letter in codes for letter in word):
             ranks[word] = max(rank, ranks.get(word, 0))
+    if language == "ru":
+        names = set()
+        for row in (ASSETS / "glide" / "ru-extra.tsv").read_text(encoding="utf-8").splitlines():
+            spelling, value = row.split("\t")
+            word = spelling.lower()
+            ranks[word] = max(ranks.get(word, 0), int(value))
+            if spelling != word:
+                names.add(word)
+        (ASSETS / "typing" / "ru.capitals").write_text(
+            "".join(f"{word}\t100\n" for word in sorted(names)), encoding="utf-8"
+        )
     for line in (ASSETS / "typing" / "never-suggest.tsv").read_text(encoding="utf-8").splitlines():
         if not line.startswith(f"{language}\tswear\t"):
             continue

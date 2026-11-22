@@ -126,4 +126,12 @@
     <string name="cleanup_model_download">Download</string>
     <string name="cleanup_model_pause">Pause</string>
     <string name="cleanup_model_resume">Resume download</string>
+    <string name="learning_report">What the keyboard learned</string>
+    <string name="learning_report_empty">Learned words and patterns will appear as you type and swipe.</string>
+    <string name="learning_report_contexts">Next-word associations: %1$d</string>
+    <string name="learning_report_corrections">Learned swipe corrections: %1$d</string>
+    <string name="learning_report_word">Word</string>
+    <string name="learning_report_weight">Weight</string>
+    <string name="learning_report_collapse">Show fewer words</string>
+    <string name="learning_report_all">Show all words</string>
 </resources>

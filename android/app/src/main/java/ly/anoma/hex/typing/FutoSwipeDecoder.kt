@@ -6,15 +6,16 @@ import kotlin.math.pow
 /** Trie-constrained search over FUTO Swipe emissions, using its published encoder scoring weights. */
 internal class FutoSwipeDecoder(
     private val letters: String,
-    dictionary: Map<String, Int>,
+    private val dictionary: Map<String, Int>,
     private val pairs: Map<String, Map<String, Int>>,
+    private val russianRanking: Boolean = false,
 ) {
     private data class Word(val text: String, val frequency: Int)
     private data class Candidate(val word: Word, val score: Double)
     private data class State(val id: Int, val score: Float)
+    private data class PersonalWord(val word: Word, val keys: List<Int>, val priority: Double)
 
     private val letterIds = letters.withIndex().associate { (index, letter) -> letter to index }
-    private val vocabulary = dictionary.keys.mapTo(HashSet()) { it.lowercase() }
     private val terminals = HashMap<Int, Word>()
     private val alternateSpellings = HashMap<Int, MutableList<Word>>()
     private var first = IntArray(1 shl 16)
@@ -67,17 +68,12 @@ internal class FutoSwipeDecoder(
                     learnContext: Boolean, allow: (String) -> Boolean = { true }): List<String> {
         require(emissions.size == FutoLayout.STEPS * FutoLayout.CLASSES)
         val candidates = beam(emissions, allow).toMutableList()
-        val added = (learned.words.keys + typed.words.keys).asSequence()
-            .filter { word -> word !in vocabulary && (learned.knows(word) || typed.knows(word)) && allow(word) }
-            .sortedByDescending { (learned.words[it] ?: 0) + (typed.words[it] ?: 0) }
-            .take(48)
-        for (text in added) {
-            val shape = spelling(text)
-            if (shape.length !in 2..FutoLayout.STEPS) continue
-            val ids = shape.map { letterIds[it] ?: -1 }
-            if (-1 in ids) continue
-            val score = emissionsFor(emissions, ids)
-            candidates.add(Candidate(Word(text, 195), rank(score, ids.size, 195)))
+        if (learned.words.isNotEmpty() || typed.words.isNotEmpty()) {
+            val alreadyScored = candidates.mapTo(HashSet()) { it.word.text.lowercase() }
+            for ((word, keys) in personalWords(emissions, learned, typed, alreadyScored, allow)) {
+                val score = emissionsFor(emissions, keys)
+                candidates.add(Candidate(word, rank(score, keys.size, word.frequency)))
+            }
         }
         val leading = candidates.maxByOrNull { it.score } ?: return emptyList()
         val preferred = learned.preferencesAgainst(leading.word.text)
@@ -93,6 +89,25 @@ internal class FutoSwipeDecoder(
             val following = .19 * ln(1.0 + (context[word] ?: 0) + (typedContext[word] ?: 0))
             candidate.score + (.10 * ln(1.0 + adjacent)).coerceAtMost(.65) + personal + choice + following
         }.asSequence().map { it.word.text }.distinctBy(String::lowercase).take(3).toList()
+    }
+
+    private fun personalWords(emissions: FloatArray, learned: LearnedWords, typed: LearnedWords,
+                              alreadyScored: Set<String>, allow: (String) -> Boolean): List<PersonalWord> {
+        val window = FutoLayout.STEPS / 3
+        val start = FloatArray(letters.length) { key -> (0 until window).maxOf { emissions[it * FutoLayout.CLASSES + key] } }
+        val end = FloatArray(letters.length) { key ->
+            (FutoLayout.STEPS - window until FutoLayout.STEPS).maxOf { emissions[it * FutoLayout.CLASSES + key] }
+        }
+        return (learned.words.keys + typed.words.keys).asSequence()
+            .filter { it !in alreadyScored && (learned.knows(it) || typed.knows(it)) && allow(it) }
+            .mapNotNull { text ->
+                val shape = spelling(text)
+                if (shape.length !in 2..FutoLayout.STEPS || shape.any { it !in letterIds }) return@mapNotNull null
+                val keys = shape.map(letterIds::getValue)
+                val display = text.replaceFirstChar(Char::uppercaseChar).takeIf { text !in dictionary && it in dictionary } ?: text
+                val usage = .15 * (learned.wordWeight(text) + typed.wordWeight(text))
+                PersonalWord(Word(display, dictionary[display] ?: 195), keys, start[keys.first()] + end[keys.last()] + usage)
+            }.sortedByDescending { it.priority }.take(48).toList()
     }
 
     private fun beam(emissions: FloatArray, allow: (String) -> Boolean): List<Candidate> {
@@ -157,11 +172,17 @@ internal class FutoSwipeDecoder(
         }
     }
 
+    private fun rank(ctc: Float, length: Int, frequency: Int): Double = if (russianRanking) {
+        ctc * RUSSIAN_RANK_NORM[length] + .013 * frequency + .6 * length
+    } else {
+        ctc * RANK_NORM[length] + .0176 * frequency + .9866 * length
+    }
+
     private companion object {
         const val BEAM = 100
         const val BETA_PRUNE = 1.0382
         val PRUNE_NORM = DoubleArray(FutoLayout.STEPS + 1) { maxOf(1, it).toDouble().pow(-.4234) }
         val RANK_NORM = DoubleArray(FutoLayout.STEPS + 1) { maxOf(1, it).toDouble().pow(-.4056) }
-        fun rank(ctc: Float, length: Int, frequency: Int) = ctc * RANK_NORM[length] + .0176 * frequency + .9866 * length
+        val RUSSIAN_RANK_NORM = DoubleArray(FutoLayout.STEPS + 1) { maxOf(1, it).toDouble().pow(-.45) }
     }
 }

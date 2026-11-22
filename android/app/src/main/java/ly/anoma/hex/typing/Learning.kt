@@ -9,6 +9,8 @@ internal data class LearnedWords(
     val words: Map<String, Int> = emptyMap(),
     private val pairs: Map<String, Int> = emptyMap(),
 ) {
+    val contextCount get() = pairs.keys.count { it.startsWith("p/") }
+    val correctionCount get() = pairs.keys.count { it.startsWith("s/") }
     fun knows(word: String) = count(word) >= 3
 
     fun completions(prefix: String): List<String> = words.entries.asSequence()
@@ -89,6 +91,8 @@ internal data class LearnedWords(
 
 internal enum class LearningMode { Tap, Swipe }
 
+internal data class LearningReport(val language: String, val mode: LearningMode, val learned: LearnedWords)
+
 /** Each language and input mode keeps a bounded vocabulary and recent word associations on-device. */
 internal class LearningStore(context: Context) {
     private val prefs = context.getSharedPreferences("learned-words", Context.MODE_PRIVATE)
@@ -115,4 +119,17 @@ internal class LearningStore(context: Context) {
     }
 
     fun clear() = prefs.edit().clear().apply()
+
+    fun reports(): List<LearningReport> = prefs.all.keys.mapNotNull { key ->
+        val mode = LearningMode.entries.firstOrNull { it.name == key.substringAfter('/', "") } ?: return@mapNotNull null
+        val language = key.substringBefore('/')
+        val learned = snapshot(language, mode)
+        if (learned.words.isEmpty()) null else LearningReport(language, mode, learned)
+    }.sortedWith(compareBy<LearningReport> { it.language }.thenBy { it.mode })
+
+    fun observe(changed: () -> Unit): () -> Unit {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> changed() }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
 }

@@ -141,4 +141,12 @@
     <string name="cleanup_model_download">Скачать</string>
     <string name="cleanup_model_pause">Приостановить</string>
     <string name="cleanup_model_resume">Продолжить загрузку</string>
+    <string name="learning_report">Чему научилась клавиатура</string>
+    <string name="learning_report_empty">Здесь появятся слова и связи, которые клавиатура запомнит при наборе и свайпе.</string>
+    <string name="learning_report_contexts">Связи для следующего слова: %1$d</string>
+    <string name="learning_report_corrections">Запомненные поправки свайпа: %1$d</string>
+    <string name="learning_report_word">Слово</string>
+    <string name="learning_report_weight">Вес</string>
+    <string name="learning_report_collapse">Показать меньше</string>
+    <string name="learning_report_all">Показать все слова</string>
 </resources>

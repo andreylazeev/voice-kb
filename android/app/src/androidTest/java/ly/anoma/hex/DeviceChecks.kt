@@ -15,6 +15,7 @@ import ly.anoma.hex.keyboard.KeyboardLetters
 import ly.anoma.hex.typing.FutoLayout
 import ly.anoma.hex.typing.FutoSwipeDecoder
 import ly.anoma.hex.typing.FutoSwipeModel
+import ly.anoma.hex.typing.GlideDecoder
 import ly.anoma.hex.typing.KeyGrid
 import ly.anoma.hex.typing.KeyPoint
 import ly.anoma.hex.typing.LearnedWords
@@ -31,10 +32,12 @@ import java.util.concurrent.TimeUnit
 class DeviceChecks : Instrumentation() {
     private var cleanupModel: CleanupModel? = null
     private var downloadModel = false
+    private var swipeBenchmark = false
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         cleanupModel = arguments?.getString("cleanup_model")?.let(CleanupModel::valueOf)
         downloadModel = arguments?.getString("download_model") == "true"
+        swipeBenchmark = arguments?.getString("swipe_benchmark") == "true"
         start()
     }
 
@@ -42,6 +45,11 @@ class DeviceChecks : Instrumentation() {
         val summary = Bundle()
         var passed = false
         try {
+            if (swipeBenchmark) {
+                summary.putInt("encoded_swipes", RussianSwipeReplay.encode(targetContext))
+                passed = true
+                return
+            }
             val recognizer = LocalSpeech(targetContext)
             for ((lang, expected) in listOf("ru" to "привет", "en" to "hello")) {
                 val wav = context.assets.open("$lang.pcm").use { it.readBytes() }
@@ -98,23 +106,46 @@ class DeviceChecks : Instrumentation() {
                     val wordList = targetContext.assets.open("glide/$lang.json").bufferedReader().use { JSONObject(it.readText()) }
                     val typing = TypingModel.asset(targetContext.assets, lang)
                     val words = wordList.keys().asSequence().associateWith(wordList::getInt).toMutableMap()
+                    if (lang == "ru") targetContext.assets.open("glide/ru-extra.tsv").bufferedReader().use { extra ->
+                        GlideDecoder.addVocabulary(words, extra.lineSequence())
+                    }
                     typing.addSwipeSpellings(words)
-                    val decoder = FutoSwipeDecoder(layout.letters, words, emptyMap())
-                    val trace = expected.mapIndexed { index, letter ->
+                    val decoder = FutoSwipeDecoder(layout.letters, words, emptyMap(), russianRanking = lang == "ru")
+                    fun trace(word: String) = word.lowercase().mapIndexed { index, letter ->
                         centres.getValue(letter).copy(timeMillis = index * 75L)
                     }
                     val started = android.os.SystemClock.elapsedRealtime()
-                    val recognized = decoder.suggestions(model.emissions(trace, layout), null,
+                    val recognized = decoder.suggestions(model.emissions(trace(expected), layout), null,
                         LearnedWords.Empty, LearnedWords.Empty, learnContext = false)
                     summary.putString("${lang}_futo", recognized.joinToString())
                     summary.putLong("${lang}_futo_ms", android.os.SystemClock.elapsedRealtime() - started)
                     check(expected in recognized) { "$lang FUTO did not recognize '$expected': $recognized" }
+                    if (lang == "ru") {
+                        val recentWords = listOf("клаве", "Яндекс", "свайпом")
+                        for (word in recentWords) {
+                            val points = trace(word)
+                            // Budget more travel time between distant keys and briefly slow down at each key.
+                            var time = 0L
+                            val paced = points.flatMapIndexed { index, point ->
+                                if (index > 0) {
+                                    val previous = points[index - 1]
+                                    time += (kotlin.math.hypot((point.x - previous.x) / 30, (point.y - previous.y) / 45) * 45).toLong()
+                                }
+                                val arrive = point.copy(timeMillis = time)
+                                time += 35
+                                listOf(arrive, point.copy(timeMillis = time))
+                            }
+                            val candidates = decoder.suggestions(model.emissions(paced, layout), null,
+                                LearnedWords.Empty, LearnedWords.Empty, false) { !typing.neverSuggest.blocks(it.lowercase(), false, -1) }
+                            check(candidates.firstOrNull() == word) { "Expected $word first, candidates: $candidates" }
+                        }
+                        summary.putString("ru_futo_new_words", recentWords.joinToString())
+                    }
                     val swears = if (lang == "ru") listOf("пизда", "ахуенно", "охуенно", "проебался") else listOf("fuck")
                     for (swear in swears) {
                         val taps = TypingWord(SpatialDecoder(typing), spatial = false)
                         taps.explicit(swear.dropLast(1))
-                        val points = swear.mapIndexed { index, letter -> centres.getValue(letter).copy(timeMillis = index * 75L) }
-                        val emissions = model.emissions(points, layout)
+                        val emissions = model.emissions(trace(swear), layout)
                         for (enabled in listOf(false, true)) {
                             taps.suggestSwearWords = enabled
                             check(taps.strip().any { it.text == swear } == enabled) { "$lang $swear tap opt-in: $enabled" }

@@ -133,7 +133,10 @@ internal class TypingWord(
         // Your own word, completed once two letters match, before the dictionary's: a word you added is
         // likelier what you mean than a reading's runner-up ("zor" offers "Zorbex" beside the fix "or").
         if (token.length >= 2) decoder.personal?.completions(token)?.firstOrNull()?.let { add(yours(it)) }
-        if (token.length >= 2) learned().completions(lower).firstOrNull { !blocked(it) }?.let { add(shown(it)) }
+        if (token.length >= 2) {
+            val completions = learned().completions(lower) + learnedFromSwipe().completions(lower)
+            completions.firstOrNull { !blocked(it) }?.let { add(shown(it)) }
+        }
         val short = if (token.length <= 3) model.completionsAfter(lower, previous, suggestSwearWords).map { shown(model.text(it)) } else emptyList()
         if (fix == null) short.firstOrNull { s -> pool.none { it.equals(s, ignoreCase = true) } }?.let(::add)
         val readings = autocorrect && spatial && token.length >= 2 && !protected()
@@ -323,7 +326,8 @@ internal class TypingWord(
     }
 
     private fun knows(spelling: String) = spelling.lowercase().let {
-        model.index(it) >= 0 || model.known(it) || it in shorthand || (decoder.personal?.index(it) ?: -1) >= 0 || learned().knows(it)
+        model.index(it) >= 0 || model.known(it) || it in shorthand || (decoder.personal?.index(it) ?: -1) >= 0 ||
+            learned().knows(it) || learnedFromSwipe().knows(it)
     }
 
     // Keeps the word this space finished for the next word's revision or join. After a split or a

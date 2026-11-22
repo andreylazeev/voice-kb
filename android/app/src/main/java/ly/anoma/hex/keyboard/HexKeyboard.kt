@@ -118,7 +118,7 @@ class HexKeyboard : InputMethodService() {
                 if (language in neuralLanguages && futo != null) {
                     val letters = KeyboardLetters.rows(language).flatMap(String::toList).filter(Char::isLetter)
                         .distinct().sorted().joinToString("")
-                    options.neural.getOrPut(letters) { FutoSwipeDecoder(letters, options.words, options.pairs) }
+                    options.neural.getOrPut(letters) { FutoSwipeDecoder(letters, options.words, options.pairs, russianRanking = language == "ru") }
                 }
             }
         }
@@ -142,7 +142,7 @@ class HexKeyboard : InputMethodService() {
                 val neuralWords = if (neural == null) emptyList() else runCatching {
                     val layout = FutoLayout(grid)
                     val decoder = options.neural.getOrPut(layout.letters) {
-                        FutoSwipeDecoder(layout.letters, options.words, options.pairs)
+                        FutoSwipeDecoder(layout.letters, options.words, options.pairs, russianRanking = language == "ru")
                     }
                     decoder.suggestions(neural.emissions(path, layout), previous, learned, typed, context, allow)
                 }.getOrDefault(emptyList())
@@ -161,6 +161,9 @@ class HexKeyboard : InputMethodService() {
         }
         val model = typingModel(language)
         val words = json.keys().asSequence().associateWith { json.getInt(it) }.toMutableMap()
+        if (language == "ru") assets.open("glide/ru-extra.tsv").bufferedReader().use { extra ->
+            GlideDecoder.addVocabulary(words, extra.lineSequence())
+        }
         model.addSwipeSpellings(words)
         SwipeLanguage(words, pairs, model)
     }

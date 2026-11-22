@@ -39,6 +39,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ly.anoma.hex.speech.*
+import ly.anoma.hex.typing.LearningMode
 import ly.anoma.hex.typing.TypingPreferences
 
 private enum class Page(val title: Int) {
@@ -296,6 +297,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                                 Entry(stringResource(android.R.string.cancel), value = "", action = { confirmLearningReset = false })
                             } else Entry(stringResource(R.string.learning_reset), action = { confirmLearningReset = true })
                         }
+                        LearningOverview(typing)
                     }
                     Page.CustomTheme -> AndroidView(modifier = Modifier.fillMaxWidth(), factory = { host ->
                         customThemeEditor(host, appearance.custom) { colors ->
@@ -336,6 +338,92 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LearningOverview(typing: TypingPreferences) {
+    var reports by remember(typing) { mutableStateOf(typing.learningReports()) }
+    DisposableEffect(typing) {
+        val stop = typing.observeLearning { reports = typing.learningReports() }
+        reports = typing.learningReports()
+        onDispose(stop)
+    }
+    var language by rememberSaveable { mutableStateOf("") }
+    var mode by rememberSaveable { mutableStateOf(LearningMode.Tap) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Label(stringResource(R.string.learning_report), weight = FontWeight.SemiBold)
+            if (reports.isEmpty()) {
+                Label(stringResource(R.string.learning_report_empty), muted = true, size = 14, lines = Int.MAX_VALUE)
+                return@Column
+            }
+            val languages = reports.map { it.language }.distinct()
+            val activeLanguage = language.takeIf { it in languages } ?: languages.first()
+            val profiles = reports.filter { it.language == activeLanguage }
+            if (languages.size > 1) {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    for (code in languages) {
+                        val label = Spoken.matching(code)?.label ?: code
+                        Action(if (code == activeLanguage) "$label ✓" else label) { language = code; expanded = false }
+                    }
+                }
+            } else {
+                Label(Spoken.matching(activeLanguage)?.label ?: activeLanguage, muted = true, size = 14)
+            }
+            val selection = profiles.firstOrNull { it.mode == mode } ?: profiles.first()
+            val maximum = profiles.maxOf { it.learned.words.size }.coerceAtLeast(1)
+            for (profile in profiles) {
+                val title = stringResource(if (profile.mode == LearningMode.Tap) R.string.learning_typing else R.string.learning_swipe)
+                val chosen = profile.mode == selection.mode
+                val count = profile.learned.words.size
+                Column(Modifier.fillMaxWidth().clickable(role = Role.Button) {
+                    mode = profile.mode
+                    expanded = false
+                }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Label(if (chosen) "$title ✓" else title, size = 14, weight = FontWeight.Medium)
+                        Label(count.toString(), muted = true, size = 14)
+                    }
+                    LearningBar(count.toFloat() / maximum)
+                }
+            }
+            val active = selection.learned
+            Rule()
+            Label(stringResource(R.string.learning_report_contexts, active.contextCount), muted = true, size = 13, lines = 2)
+            if (selection.mode == LearningMode.Swipe) {
+                Label(stringResource(R.string.learning_report_corrections, active.correctionCount), muted = true, size = 13, lines = 2)
+            }
+            val words = remember(active) {
+                active.words.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            }
+            val maxWeight = words.first().value.coerceAtLeast(1)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Label(stringResource(R.string.learning_report_word), size = 13, weight = FontWeight.Medium)
+                Label(stringResource(R.string.learning_report_weight), muted = true, size = 13)
+            }
+            for ((word, weight) in words.take(if (expanded) words.size else 8)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Label(word, size = 15, mod = Modifier.weight(1f))
+                        Label(weight.toString(), muted = true, size = 14)
+                    }
+                    LearningBar(weight.toFloat() / maxWeight)
+                }
+            }
+            if (words.size > 8) Action(stringResource(if (expanded) R.string.learning_report_collapse else R.string.learning_report_all)) {
+                expanded = !expanded
+            }
+        }
+    }
+}
+
+@Composable
+private fun LearningBar(fraction: Float) {
+    val color = voiceColorResource(R.color.ink)
+    Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(4.dp)).background(color.copy(alpha = .12f))) {
+        Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(color.copy(alpha = .6f)))
     }
 }
 
