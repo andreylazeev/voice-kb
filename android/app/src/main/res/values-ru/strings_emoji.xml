@@ -1,0 +1,12 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="emoji_category_recent" tools:override="true">Недавние</string>
+    <string name="emoji_category_emotions" tools:override="true">Лица и эмоции</string>
+    <string name="emoji_category_people" tools:override="true">Люди</string>
+    <string name="emoji_category_animals_nature" tools:override="true">Животные и природа</string>
+    <string name="emoji_category_food_drink" tools:override="true">Еда и напитки</string>
+    <string name="emoji_category_travel_places" tools:override="true">Путешествия и места</string>
+    <string name="emoji_category_activity" tools:override="true">Занятия и события</string>
+    <string name="emoji_category_objects" tools:override="true">Предметы</string>
+    <string name="emoji_category_symbols" tools:override="true">Символы</string>
+    <string name="emoji_category_flags" tools:override="true">Флаги</string>
+</resources>

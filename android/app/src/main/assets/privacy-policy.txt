@@ -1,0 +1,7 @@
+VoiceKB privacy
+
+VoiceKB has no internet permission. It processes microphone audio and typed text on the phone. Dictation is kept in memory for processing and insertion. A draft interrupted by a screen change is kept in memory until it is inserted or discarded. Android manages microphone permission and its personal dictionary.
+
+Keyboard personalisation
+
+VoiceKB can keep a small vocabulary and counts from the words and suggestions you accept. It stores them on the phone, separated by language and input mode. Password fields and fields that request private input are excluded. Open Keyboard → Personalisation to turn off individual features or clear the learned data.
