@@ -10,6 +10,14 @@ https://github.com/danakt/russian-words/tree/d68c007fe9260d2d40ce413f13f77335c5a
 The source spelling list validates lower-frequency candidates.
 See danakt-russian-words-mit.txt.
 
+Alexander I. Lebedev, Russian Hunspell dictionary, BSD-style license.
+https://github.com/wooorm/dictionaries/tree/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/ru
+See lebedev-hunspell-ru.txt for the complete notice and license.
+VoiceKB uses Hunspell to validate forms attested in Koziev's frequencies.
+The derived typing model and validity list keep single Cyrillic forms,
+rank candidate replacements by their frequency and omit restricted words.
+
 VoiceKB sums frequencies across parts of speech, keeps single Cyrillic words,
 and adds selected modern names, inflections and conversational forms.
 The supplement is shared by tap typing and both Russian swipe decoders.
+The tap model also uses a larger vocabulary based on the three sources above.

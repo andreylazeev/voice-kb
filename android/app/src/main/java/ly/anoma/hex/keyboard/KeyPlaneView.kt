@@ -188,20 +188,21 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         spaceKey.sound = AudioManager.FX_KEYPRESS_SPACEBAR
         spaceKey.label?.setTextColor(quiet)
         spaceKey.setOnLongClickListener { host.openLanguageMenu(); true }
-        // A press that leaves the key still types its space on lifting: a quick tap that drifts must
-        // never lose it. Only a slide that moved the cursor, or the long press's menu, types none.
+        // In mixed mode the menu waits for lift, leaving time to start a cursor drag after a hold.
         spaceKey.setOnTouchListener { v, e ->
+            val longPress = ViewConfiguration.getLongPressTimeout().toLong()
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    // Another key going down while space is held types the space first, unless it moved the cursor.
                     roll.down(v) {
-                        removeCallbacks(switchLanguage); val typing = v.isPressed && cursorSlide == null
+                        removeCallbacks(switchLanguage); val typing = v.isPressed && spaceGesture.typesOnRollover
                         v.isPressed = false; cursorSlide = null
                         if (typing) v.performClick()
                     }
-                    v.isPressed = true; cursorSlide = null; spaceGesture.down(e.x, e.y, e.eventTime)
+                    v.isPressed = true; cursorSlide = null
+                    val behavior = ime.feedback.spaceSwipeBehavior
+                    spaceGesture.down(e.x, e.y, e.eventTime, behavior)
                     spacePoint = KeyPoint((v.left + e.x).toDouble(), (bottom.top - rows.top + e.y).toDouble())
-                    postDelayed(switchLanguage, ViewConfiguration.getLongPressTimeout().toLong())
+                    if (behavior != SpaceSwipeBehavior.LanguageAndCursor) postDelayed(switchLanguage, longPress)
                 }
                 MotionEvent.ACTION_MOVE -> if (v.isPressed) {
                     val characters = spaceGesture.move(e.x, e.y, e.eventTime)
@@ -210,7 +211,17 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                 }
                 MotionEvent.ACTION_UP -> if (roll.up(v)) {
                     removeCallbacks(switchLanguage); val pressed = v.isPressed; v.isPressed = false
-                    if (pressed && spaceGesture.up()) v.performClick()
+                    if (pressed) {
+                        spaceGesture.move(e.x, e.y, e.eventTime)?.let { characters ->
+                            (cursorSlide ?: ime.engine.cursorSlide()).moveTo(characters)
+                        }
+                        when (spaceGesture.up(e.eventTime, longPress)) {
+                            SpaceGesture.Release.Space -> v.performClick()
+                            SpaceGesture.Release.SwitchLanguage -> ime.toggleLayout()
+                            SpaceGesture.Release.LanguageMenu -> v.performLongClick()
+                            SpaceGesture.Release.None -> Unit
+                        }
+                    }
                     if (pressed) spaceKey.typedOnLift()
                     cursorSlide = null
                 }
@@ -918,7 +929,11 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         spaceKey.contentDescription = context.getString(R.string.keyboard_space)
         spaceKey.longClickLabel = context.getString(R.string.keyboard_space_language_action,
             if (next.translate) context.getString(R.string.keyboard_space_translate, next.spoken.label) else next.spoken.label)
-        spaceKey.label?.text = ime.layoutLanguage.label
+        val language = ime.layoutLanguage.label
+        spaceKey.label?.text = when (ime.feedback.spaceSwipeBehavior) {
+            SpaceSwipeBehavior.LanguageAndCursor, SpaceSwipeBehavior.LanguageOnly -> "‹ $language ›"
+            SpaceSwipeBehavior.CursorOnly, SpaceSwipeBehavior.Off -> language
+        }
         spaceKey.label?.textSize = if (next.translate) 12f else 14f
     }
     fun cancelGestures() {

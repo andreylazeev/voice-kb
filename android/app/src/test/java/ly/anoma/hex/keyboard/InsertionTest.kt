@@ -176,20 +176,62 @@ class InsertionTest {
     @Test fun quickSpaceTapsThatDriftStillTypeTheirSpace() {
         for (ms in listOf(60L, 100L, 150L)) for (drift in listOf(8f, 21f, 42f, 63f)) {
             val space = SpaceGesture(start = 45f, step = 33f, stillSlop = 21f)
-            space.down(500f, 50f, 0)
+            space.down(500f, 50f, 0, SpaceSwipeBehavior.CursorOnly)
             for (t in 10L..ms step 10L) assertEquals(null, space.move(500f - drift * t / ms, 50f, t))
-            assertEquals(true, space.up())
+            assertEquals(SpaceGesture.Release.Space, space.up(ms, 500))
         }
     }
     @Test fun aSpaceSlideMovesTheCursorAtGboardsSteps() {
         val space = SpaceGesture(start = 45f, step = 33f, stillSlop = 21f)
-        space.down(500f, 50f, 0)
+        space.down(500f, 50f, 0, SpaceSwipeBehavior.CursorOnly)
         assertEquals(null, space.move(458f, 50f, 300))
         assertEquals(-1, space.move(455f, 50f, 310))
         assertEquals(-3, space.move(374f, 50f, 320))
         assertEquals(-15, space.move(-25f, 50f, 330))
         assertEquals(2, space.move(580f, 50f, 340))
-        assertEquals(false, space.up())
+        assertEquals(SpaceGesture.Release.None, space.up(350, 500))
+    }
+    @Test fun disablingSpaceSlidesKeepsShortTapsAndConsumesLongDrags() {
+        val space = SpaceGesture(start = 45f, step = 33f, stillSlop = 21f)
+        space.down(500f, 50f, 0, SpaceSwipeBehavior.Off)
+        assertEquals(null, space.move(455f, 50f, 120))
+        assertEquals(SpaceGesture.Release.Space, space.up(125, 500))
+        space.down(500f, 50f, 0, SpaceSwipeBehavior.Off)
+        assertEquals(null, space.move(374f, 50f, 320))
+        assertEquals(SpaceGesture.Release.None, space.up(325, 500))
+        assertEquals(false, space.still)
+        space.down(500f, 50f, 0, SpaceSwipeBehavior.Off)
+        assertEquals(true, space.still)
+    }
+    @Test fun mixedSpaceSwipeDistinguishesAnEarlySwipeFromAHeldDrag() {
+        val space = SpaceGesture(start = 45f, step = 33f, stillSlop = 21f)
+        for (direction in listOf(-1, 1)) {
+            space.down(500f, 50f, 0, SpaceSwipeBehavior.LanguageAndCursor)
+            assertEquals(null, space.move(500f + direction * 23f, 50f, 100))
+            assertEquals(null, space.move(500f + direction * 80f, 50f, 500))
+            assertEquals(SpaceGesture.Release.SwitchLanguage, space.up(540, 500))
+            assertEquals(false, space.typesOnRollover)
+            space.down(500f, 50f, 0, SpaceSwipeBehavior.LanguageAndCursor)
+            assertEquals(null, space.move(503f, 52f, 250))
+            assertEquals(direction * 2, space.move(500f + direction * 80f, 50f, 650))
+            assertEquals(0, space.move(520f, 50f, 730))
+            assertEquals(SpaceGesture.Release.None, space.up(750, 500))
+        }
+        space.down(500f, 50f, 0, SpaceSwipeBehavior.LanguageAndCursor)
+        assertEquals(SpaceGesture.Release.LanguageMenu, space.up(650, 500))
+        space.down(500f, 50f, 0, SpaceSwipeBehavior.LanguageAndCursor)
+        assertEquals(null, space.move(520f, 82f, 80))
+        assertEquals(SpaceGesture.Release.Space, space.up(110, 500))
+    }
+    @Test fun languageOnlySpaceSwipeKeepsSwitchingAfterAStationaryHold() {
+        val space = SpaceGesture(start = 45f, step = 33f, stillSlop = 21f)
+        space.down(500f, 50f, 0, SpaceSwipeBehavior.LanguageOnly)
+        assertEquals(null, space.move(565f, 52f, 425))
+        assertEquals(SpaceGesture.Release.SwitchLanguage, space.up(450, 500))
+        space.down(500f, 50f, 0, SpaceSwipeBehavior.LanguageOnly)
+        space.move(565f, 50f, 120)
+        space.move(505f, 50f, 170)
+        assertEquals(SpaceGesture.Release.None, space.up(180, 500))
     }
     @Test fun aCursorSlideStepsOverWholeCharacters() {
         val moves = ArrayList<Int>()

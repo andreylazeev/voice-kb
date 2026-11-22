@@ -12,13 +12,15 @@ import java.nio.channels.FileChannel
  * All large tables stay in the read-only file mapping, including when mapped inside the APK. */
 internal class TypingModel private constructor(private val data: ByteBuffer, val language: String,
                                               private val validWords: ByteBuffer?, list: Reader,
-                                              val capitals: Capitals? = null) : Lexicon {
+                                              val capitals: Capitals?,
+                                              val corrections: TypingModel?, patterns: ByteArray?) : Lexicon {
     private fun u8(pos: Int) = data.get(pos).toInt() and 255
     private fun int(pos: Int) = data.getInt(pos)
     val words = int(8)
     val pairs = int(12)
     private val blobBytes = int(16)
     val alphabet = int(20)
+    private val spellingPatterns = patterns?.let { SpellingPatterns(it, alphabet + 1) }
     private val chars = CharArray(alphabet + 1)
     val bases = IntArray(alphabet + 1)
     private val codes = HashMap<Char, Int>()
@@ -31,6 +33,13 @@ internal class TypingModel private constructor(private val data: ByteBuffer, val
     val apostrophe get() = code('\'')
     fun code(c: Char) = codes[c] ?: 0
     fun character(code: Int) = chars[code]
+    fun doubleSlipEvidence(typed: String, candidate: String): SpellingPatterns.Evidence {
+        val patterns = spellingPatterns ?: return SpellingPatterns.Evidence.None
+        fun letters(word: String) = IntArray(word.length + 2).apply {
+            for ((index, letter) in word.withIndex()) this[index + 1] = bases[code(letter)]
+        }
+        return patterns.evidence(letters(typed), letters(candidate))
+    }
     init {
         require(int(0) == 0x4d545848 && int(4) == 3 && words in 1..250000 && pairs in 0..2000000 &&
             blobBytes > 0 && blob.toLong() + blobBytes == data.limit().toLong())
@@ -237,7 +246,7 @@ internal class TypingModel private constructor(private val data: ByteBuffer, val
         }
         return -1
     }
-    fun validLiteral(word: String) = validEntry(word) >= 0
+    fun validLiteral(word: String) = validEntry(word) >= 0 || (corrections?.index(word) ?: -1) >= 0
     /** What a listed spelling outside the model costs as a word, -ln P with the model's backoff, from
      * how often the books use it; null when it isn't listed or its list has no counts (English). */
     fun validCost(word: String): Double? = validEntry(word).takeIf { it in 0..255 }?.let { 0.92 + it * 0.125 }
@@ -280,11 +289,13 @@ internal class TypingModel private constructor(private val data: ByteBuffer, val
             require(size in 1L..32_000_000L)
             return channel.map(FileChannel.MapMode.READ_ONLY, offset, size).order(ByteOrder.LITTLE_ENDIAN)
         }
-        private fun open(model: ByteBuffer, language: String, valid: ByteBuffer?, list: Reader, capitals: ByteBuffer?): TypingModel {
+        private fun open(model: ByteBuffer, language: String, valid: ByteBuffer?, capitals: ByteBuffer?,
+                         extra: ByteBuffer?, patterns: ByteArray?, list: () -> Reader): TypingModel {
             require(model.limit() >= 36 && model.getInt(20) in 1..250)
             require(valid == null || valid.get(valid.limit() - 1) == 10.toByte())
             require(capitals == null || capitals.get(capitals.limit() - 1) == 10.toByte())
-            return TypingModel(model, language, valid, list, capitals?.let(::Capitals))
+            val corrections = extra?.let { open(it, language, null, null, null, null, list) }
+            return list().use { TypingModel(model, language, valid, it, capitals?.let(::Capitals), corrections, patterns) }
         }
         fun asset(assets: AssetManager, language: String): TypingModel {
             fun read(name: String) = assets.openFd("typing/" + name).use { fd ->
@@ -293,16 +304,22 @@ internal class TypingModel private constructor(private val data: ByteBuffer, val
             val names = assets.list("typing").orEmpty()
             val capitals = if (language + ".capitals" in names) read(language + ".capitals") else null
             val valid = if (language + ".valid" in names) read(language + ".valid") else null
-            return assets.open("typing/never-suggest.tsv").bufferedReader().use { list ->
-                open(read(language + ".hextm"), language, valid, list, capitals)
+            val extra = (language + ".correction.hextm").takeIf { it in names }?.let(::read)
+            val patterns = (language + ".patterns").takeIf { it in names }?.let {
+                assets.open("typing/" + it).use { stream -> stream.readBytes() }
+            }
+            return open(read(language + ".hextm"), language, valid, capitals, extra, patterns) {
+                assets.open("typing/never-suggest.tsv").bufferedReader()
             }
         }
         fun file(file: File, language: String): TypingModel {
             fun read(f: File) = FileInputStream(f).use { mapped(it.channel, 0, f.length()) }
             val valid = File(file.parentFile, language + ".valid").takeIf { it.isFile }?.let(::read)
             val capitals = File(file.parentFile, language + ".capitals").takeIf { it.isFile }?.let(::read)
-            return File(file.parentFile, "never-suggest.tsv").bufferedReader().use { list ->
-                open(read(file), language, valid, list, capitals)
+            val extra = File(file.parentFile, language + ".correction.hextm").takeIf { it.isFile }?.let(::read)
+            val patterns = File(file.parentFile, language + ".patterns").takeIf { it.isFile }?.readBytes()
+            return open(read(file), language, valid, capitals, extra, patterns) {
+                File(file.parentFile, "never-suggest.tsv").bufferedReader()
             }
         }
     }

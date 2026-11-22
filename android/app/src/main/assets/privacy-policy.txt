@@ -1,6 +1,6 @@
 VoiceKB privacy
 
-VoiceKB processes microphone audio and typed text on the phone. It uses the internet only to download the cleanup model you choose in Settings from Hugging Face. Downloads send neither audio nor typed or dictated text. The downloaded model runs on the phone. Dictation is kept in memory for processing and insertion. A draft interrupted by a screen change is kept in memory until it is inserted or discarded. Android manages microphone permission and its personal dictionary.
+VoiceKB processes microphone audio and typed text on the phone. It uses the internet to download the selected cleanup model from Hugging Face and to check or download updates from GitHub Releases. You can turn on automatic update checks in settings. These requests contain no audio, typed or dictated text, or learned words. The downloaded model runs on the phone. Dictation is kept in memory for processing and insertion. A draft interrupted by a screen change is kept in memory until it is inserted or discarded. Android manages microphone permission and its personal dictionary.
 
 Keyboard personalisation
 

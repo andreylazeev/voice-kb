@@ -3,6 +3,7 @@ package ly.anoma.hex
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import ly.anoma.hex.updates.UpdateCheckJob
 import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.Uri
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
     private val imm by lazy { getSystemService(InputMethodManager::class.java) }
     private var setup by mutableStateOf(Setup())
     private var page by mutableIntStateOf(0)
+    private var updatesRequest by mutableIntStateOf(0)
     private val speech by lazy { SpeechPreferences(this) }
     private val typing by lazy { TypingPreferences(this) }
     private var phase by mutableStateOf(SpeechPhase.Idle)
@@ -89,6 +91,8 @@ class MainActivity : ComponentActivity() {
             meter = { voiceLevel.floatValue = it }, showPreview = { liveSpeech = it },
             insert = { text, _, _ -> transcript = text })
         page = prefs.getInt("page", 0).coerceIn(0, 3)
+        openUpdatesFrom(intent)
+        UpdateCheckJob.schedule(this)
         for (name in listOf(Settings.Secure.DEFAULT_INPUT_METHOD, Settings.Secure.ENABLED_INPUT_METHODS))
             contentResolver.registerContentObserver(Settings.Secure.getUriFor(name), false, changed)
         refresh()
@@ -97,12 +101,24 @@ class MainActivity : ComponentActivity() {
                 BackHandler(page in 1..2) { go(page - 1) }
                 if (page == 3) HexSettings(setup, speech, typing,
                     phase, transcript, liveSpeech, voiceLevel, notice, ::dictate, capture::cancel, { transcript = "" }, { go(it) },
-                    { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) })
+                    { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }, updatesRequest)
                 else SetupScreen(page, setup, ::go, ::askForMic,
                     enable = { enabling = true; startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) },
                     choose = { imm.showInputMethodPicker() })
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openUpdatesFrom(intent)
+    }
+
+    private fun openUpdatesFrom(intent: Intent?) {
+        if (intent?.getBooleanExtra(UpdateCheckJob.OPEN_UPDATES, false) != true) return
+        intent.removeExtra(UpdateCheckJob.OPEN_UPDATES)
+        page = 3
+        updatesRequest++
     }
 
     private fun dictate() {

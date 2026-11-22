@@ -267,9 +267,15 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
                 else -> context.getString(R.string.keyboard_suggest, s)
             }
             slotViews[i].isEnabled = s.isNotEmpty()
+            slotViews[i].visibility = if (s.isEmpty()) GONE else VISIBLE
         }
-        dividers[0].visibility = if (chip == 0 || chip == 1) INVISIBLE else VISIBLE
-        dividers[1].visibility = if (chip == 1 || chip == 2) INVISIBLE else VISIBLE
+        for (i in dividers.indices) {
+            dividers[i].visibility = when {
+                offered[i] == null || offered[i + 1] == null -> GONE
+                chip == i || chip == i + 1 -> INVISIBLE
+                else -> VISIBLE
+            }
+        }
         update()
     }
     /** Undo dictation shows in the slots' place, or goes. */

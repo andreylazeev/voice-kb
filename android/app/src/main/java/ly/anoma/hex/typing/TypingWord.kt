@@ -242,7 +242,8 @@ internal class TypingWord(
         personal?.shortcut(token)?.let { return it }
         // Your own word: never corrected into another, and spelled your way ("github" -> "GitHub").
         personal?.index(token)?.takeIf { it >= 0 }?.let { return yours(personal.text(it)).takeIf { s -> s != token } }
-        if (learned().knows(token) && model.index(token.lowercase()) < 0 && !model.known(token.lowercase())) return null
+        if ((learned().knows(token) || learnedFromSwipe().knows(token)) &&
+            model.index(token.lowercase()) < 0 && !model.known(token.lowercase())) return null
         if (literalOnly || blocked(token)) return null
         val lower = token.lowercase()
         val allCaps = token.length >= 2 && token.all { it.isUpperCase() }

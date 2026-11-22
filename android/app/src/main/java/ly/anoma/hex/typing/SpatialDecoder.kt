@@ -125,7 +125,7 @@ internal class SpatialDecoder(val model: TypingModel) {
     // The words of [lexicon] (the model unless given) the taps from..end read as. Only the model's
     // words are checked against the never-suggest list: your own words are yours to offer.
     private fun search(taps: List<Tap>, from: Int, end: Int, edits: Int, swears: Boolean, previous: Int,
-                       lexicon: Lexicon = model): List<Found> {
+                       lexicon: Lexicon = model, allowDistantSubstitution: Boolean = false): List<Found> {
         val depthLimit = end - from + edits + 2
         val context = model.neverSuggest.restrictedContext(previous)
         val own = lexicon === model
@@ -139,7 +139,8 @@ internal class SpatialDecoder(val model: TypingModel) {
             val code = taps[t].choices.firstOrNull() ?: return@DoubleArray EDIT_COST
             val key = model.bases[code]
             for (n in intArrayOf(t - 1, t + 1)) if (n in from until end &&
-                taps[n].choices.firstOrNull()?.let { model.bases[it] == key } == true) return@DoubleArray EDIT_COST
+                taps[n].choices.firstOrNull()?.let { model.bases[it] == key } == true)
+                return@DoubleArray if (model.language == "ru") RUSSIAN_REPEAT_COST else EDIT_COST
             val gap = taps[t].choices.firstOrNull { model.bases[it] != key }?.let { taps[t].cost[it] } ?: MAX_TAP_COST
             EDIT_COST + minOf(4.0, gap)
         }
@@ -161,7 +162,16 @@ internal class SpatialDecoder(val model: TypingModel) {
                 if (t < end) for (c in taps[t].choices) push(c, t + 1, s.edits, s.cost + taps[t].cost[c])
                 if (d > 0 && model.apostrophe != 0) push(model.apostrophe, t, s.edits, s.cost)
                 if (s.edits >= edits) continue
-                for (c in 1..model.alphabet) if (c != model.apostrophe) push(c, t, s.edits + 1, s.cost + EDIT_COST)
+                val russianVowel = allowDistantSubstitution && model.language == "ru" && t < end &&
+                    taps[t].choices.firstOrNull()?.let { model.character(it) in RUSSIAN_VOWELS } == true
+                for (c in 1..model.alphabet) if (c != model.apostrophe) {
+                    push(c, t, s.edits + 1, s.cost + EDIT_COST)
+                    if (allowDistantSubstitution && t < end && taps[t].cost[c] > MAX_TAP_COST) {
+                        val base = if (russianVowel && model.character(c) in RUSSIAN_VOWELS) 6.0 else 8.5
+                        val distance = minOf(2.0, (taps[t].cost[c] - MAX_TAP_COST) * .1)
+                        push(c, t + 1, s.edits + 1, s.cost + base + distance)
+                    }
+                }
                 if (t < end) layer.add(State(s.lo, s.hi, t + 1, s.edits + 1, s.cost + extraTap[t - from]))
                 if (t + 1 >= end || d + 2 > depthLimit) continue
                 val first = taps[t + 1]; val second = taps[t]
@@ -203,13 +213,24 @@ internal class SpatialDecoder(val model: TypingModel) {
         // One of your own words scores as a moderately common one (about the 10,000th).
         if (yours >= 0) lm = minOf(lm, USER_WORD_COST)
         var cost = lmWeight * lm - boost(typed)
-        for (i in taps.indices) cost += taps[i].cost[model.code(typed[i])]
+        var largestTapCost = 0.0
+        for (i in taps.indices) {
+            val code = model.code(typed[i])
+            val tap = taps[i].cost
+            cost += tap[code]
+            largestTapCost = maxOf(largestTapCost, minOf(tap[code], tap[model.bases[code]]))
+        }
         if (!cost.isFinite()) return none
+        // A valid Russian inflection selected with unambiguous taps can be rarer
+        // than a similar word. Frequency alone must not replace it.
+        val keepLiteral = model.language == "ru" && knownLiteral && largestTapCost < 1.0
         val readings = ArrayList<Reading>()
-        // iOS applies the language score only to the five best spatial readings.
-        for ((w, spatial) in search(taps, 0, taps.size, 1, swears, previous).sortedWith(spatialOrder).take(5)) if (w != literal) {
+        fun reading(w: Int, spatial: Double): Reading {
             val text = model.text(w)
-            readings.add(Reading(text, spatial + lmWeight * model.languageCost(previous, w) - boost(text), model.frequencyCost(w)))
+            return Reading(text, spatial + lmWeight * model.languageCost(previous, w) - boost(text), model.frequencyCost(w))
+        }
+        for ((w, spatial) in search(taps, 0, taps.size, 1, swears, previous).sortedWith(spatialOrder).take(5)) if (w != literal) {
+            readings.add(reading(w, spatial))
         }
         if (personal != null) for ((w, spatial) in search(taps, 0, taps.size, 1, swears, previous, personal).sortedWith(spatialOrder).take(3))
             if (w != yours) readings.add(Reading(personal.text(w), spatial + lmWeight * USER_WORD_COST, (USER_WORD_COST * 8).toInt()))
@@ -253,7 +274,7 @@ internal class SpatialDecoder(val model: TypingModel) {
         // words only as a known word is.
         val margin = if (best == null || !knownLiteral || foldAccents(best.text.lowercase()) == foldAccents(typed) ||
             (listed != null && ' ' !in best.text)) 2.0 else 7.0
-        var replace = if (best != null && cost - best.cost >= margin) best.text else null
+        var replace = if (!keepLiteral && best != null && cost - best.cost >= margin) best.text else null
         var shown = readings.asSequence().filter { it.cost < cost && !it.text.equals(typed, ignoreCase = true) }
             .distinctBy { it.text.lowercase() }.toMutableList()
         // Nothing above read a spelling that is no word at all: a missed space may still explain it,
@@ -270,8 +291,84 @@ internal class SpatialDecoder(val model: TypingModel) {
                 }
             }
         }
-        if (best == null && replace == null) return none
+        // A distant key substitution is also plausible for an unknown spelling. Try it after the
+        // normal tap decoder so it cannot displace an established nearby or missing-space fix.
+        if (replace == null && !knownLiteral && typed.length >= 3 && (model.language == "en" || model.language == "ru")) {
+            val distant = search(taps, 0, taps.size, 1, swears, previous, allowDistantSubstitution = true)
+                .sortedWith(spatialOrder).take(12).map { reading(it.word, it.cost) }
+            val ranked = (shown + distant).sortedWith(compareBy<Reading> { it.cost }.thenBy { it.text })
+                .filter { it.cost < cost }.distinctBy { it.text.lowercase() }
+            val bestFallback = ranked.firstOrNull()
+            if (bestFallback != null && cost - bestFallback.cost >= 2.5 &&
+                (ranked.getOrNull(1)?.cost ?: Double.POSITIVE_INFINITY) - bestFallback.cost >= .75) {
+                replace = bestFallback.text
+            }
+            shown = ranked.toMutableList()
+        }
+        val extra = model.corrections
+        val primary = shown.firstOrNull()
+        // Search the rarer forms when the main model has no strong correction.
+        if (extra != null && !knownLiteral && typed.length >= 4 &&
+            (replace == null || primary == null || cost - primary.cost < 6.0)) {
+            val alternatives = search(taps, 0, taps.size, 1, swears, previous, extra, allowDistantSubstitution = true)
+                .mapNotNull { (word, spatial) ->
+                    val text = extra.text(word)
+                    if (text == typed || model.neverSuggest.blocks(text, swears, previous)) null
+                    else Reading(text, spatial + lmWeight * extra.languageCost(-1, word) + .5 - boost(text),
+                        extra.frequencyCost(word))
+                }
+            val ranked = (shown + alternatives).filter { it.cost < cost }
+                .sortedWith(compareBy<Reading> { it.cost }.thenBy { it.text }).distinctBy { it.text }
+            val bestExtra = ranked.firstOrNull()
+            if (bestExtra != null && bestExtra in alternatives && cost - bestExtra.cost >= 2.25 &&
+                (ranked.getOrNull(1)?.cost ?: Double.POSITIVE_INFINITY) - bestExtra.cost >= .75) {
+                replace = bestExtra.text
+            }
+            shown = ranked.toMutableList()
+        }
+        if (replace == null && !knownLiteral && model.language == "ru" && typed.length >= 6) {
+            val compounds = nearbyDoubleSlips(typed, taps, previous, swears, ::boost)
+            val ranked = (shown + compounds).sortedWith(compareBy<Reading> { it.cost }.thenBy { it.text })
+                .distinctBy { it.text }
+            val bestCompound = ranked.firstOrNull()
+            if (bestCompound != null && bestCompound in compounds &&
+                (ranked.getOrNull(1)?.cost ?: Double.POSITIVE_INFINITY) - bestCompound.cost >= 1.75) {
+                // Strong spelling evidence can outweigh a small deficit in tap and frequency scores.
+                val margin = when (model.doubleSlipEvidence(typed, bestCompound.text)) {
+                    SpellingPatterns.Evidence.Strong -> -1.0
+                    SpellingPatterns.Evidence.Weak -> 1.0
+                    SpellingPatterns.Evidence.None -> Double.POSITIVE_INFINITY
+                }
+                if (cost - bestCompound.cost >= margin) replace = bestCompound.text
+            }
+            shown = ranked.filterTo(ArrayList()) { it.cost < cost || it.text == replace }
+        }
+        if (shown.isEmpty() && replace == null) return none
         return Decision(replace, shown.take(3))
+    }
+
+    /** Two nearby slips can make a common word look costlier than an unknown literal.
+     * Relax the spatial penalty in this fallback for two substitutions supported by
+     * the tap neighbourhood. Leave insertion, deletion and distant substitutions to
+     * the regular decoder. */
+    private fun nearbyDoubleSlips(typed: String, taps: List<Tap>, previous: Int, swears: Boolean,
+                                  boost: (String) -> Double): List<Reading> {
+        val keys = IntArray(typed.length) { model.bases[model.code(typed[it])] }
+        val words = ArrayList<Reading>()
+        fun collect(lexicon: TypingModel, previousWord: Int, penalty: Double) {
+            for ((word, spatial) in search(taps, 0, taps.size, 0, swears, previous, lexicon)) {
+                if (lexicon.length(word) != keys.size) continue
+                val changes = keys.indices.count { lexicon.bases[lexicon.byte(word, it)] != keys[it] }
+                if (changes != 2) continue
+                val text = lexicon.text(word)
+                if (model.neverSuggest.blocks(text, swears, previous)) continue
+                val cost = .65 * spatial + lmWeight * lexicon.languageCost(previousWord, word) + penalty - boost(text)
+                words.add(Reading(text, cost, lexicon.frequencyCost(word)))
+            }
+        }
+        collect(model, previous, 0.0)
+        model.corrections?.let { collect(it, -1, .5) }
+        return words
     }
 
     // What a missed space can still make of taps nothing else read (iOS missedSpaceReading): the
@@ -368,6 +465,8 @@ internal class SpatialDecoder(val model: TypingModel) {
     private companion object {
         val spatialOrder = compareBy<Found> { it.cost }.thenBy { it.word }
         const val EDIT_COST = 7.0
+        const val RUSSIAN_REPEAT_COST = 4.5
+        const val RUSSIAN_VOWELS = "аеёиоуыэюя"
         const val MAX_TAP_COST = 9.0
         // An accented letter typed as its base letter's key (é from e).
         const val ACCENT_COST = 1.0

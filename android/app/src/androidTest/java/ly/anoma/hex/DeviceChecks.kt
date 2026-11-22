@@ -54,6 +54,8 @@ class DeviceChecks : Instrumentation() {
             runOnMainSync { privacyCheck = runCatching { KeyboardPrivacyChecks.verify(targetContext) } }
             privacyCheck.getOrThrow()
             summary.putString("keyboard_incognito", "private input and emoji history isolated")
+            UpdateReleaseChecks.verify()
+            summary.putString("release_updates", "version, source and integrity metadata checked")
             val recognizer = LocalSpeech(targetContext)
             for ((lang, expected) in listOf("ru" to "привет", "en" to "hello")) {
                 val wav = context.assets.open("$lang.pcm").use { it.readBytes() }

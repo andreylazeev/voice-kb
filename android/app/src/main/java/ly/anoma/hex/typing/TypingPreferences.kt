@@ -2,6 +2,7 @@ package ly.anoma.hex.typing
 
 import android.content.Context
 import java.security.MessageDigest
+import ly.anoma.hex.keyboard.SpaceSwipeBehavior
 import ly.anoma.hex.speech.Spoken
 
 internal class TypingPreferences(context: Context) {
@@ -20,6 +21,10 @@ internal class TypingPreferences(context: Context) {
     var autocorrect: Boolean
         get() = prefs.getBoolean("autocorrect", true)
         set(value) { prefs.edit().putBoolean("autocorrect", value).apply() }
+    var spaceSwipeBehavior: SpaceSwipeBehavior
+        get() = SpaceSwipeBehavior.entries.firstOrNull { it.name == prefs.getString("spaceSwipeBehavior", null) }
+            ?: if (prefs.getBoolean("spaceCursorGesture", true)) SpaceSwipeBehavior.LanguageAndCursor else SpaceSwipeBehavior.Off
+        set(value) { prefs.edit().putString("spaceSwipeBehavior", value.name).apply() }
     var suggestSwearWords: Boolean
         get() = prefs.getBoolean(SUGGEST_SWEAR_WORDS, false)
         set(value) { prefs.edit().putBoolean(SUGGEST_SWEAR_WORDS, value).apply() }

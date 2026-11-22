@@ -1,15 +1,20 @@
 package ly.anoma.hex
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.app.ActivityManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.SharedPreferences
 import android.os.Build
+import android.net.Uri
 import android.provider.Settings
 import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
@@ -38,19 +43,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ly.anoma.hex.keyboard.SpaceSwipeBehavior
 import ly.anoma.hex.speech.*
 import ly.anoma.hex.typing.LearningMode
 import ly.anoma.hex.typing.TypingPreferences
+import ly.anoma.hex.updates.AppUpdates
+import ly.anoma.hex.updates.UpdateCheckJob
 
 private enum class Page(val title: Int) {
     Home(R.string.app_name), Dictation(R.string.settings_dictation), Keyboard(R.string.settings_keyboard), Privacy(R.string.settings_privacy),
     Language(R.string.settings_dictation_language), Layout(R.string.settings_keyboard_layout), Cleanup(R.string.settings_clean), Theme(R.string.settings_theme), CustomTheme(R.string.theme_custom),
-    Learning(R.string.settings_learning), KeyboardHeight(R.string.settings_keyboard_height),
-    CleanupModels(R.string.cleanup_models_title),
+    Learning(R.string.settings_learning), KeyboardHeight(R.string.settings_keyboard_height), SpaceSwipe(R.string.settings_space_cursor),
+    CleanupModels(R.string.cleanup_models_title), Updates(R.string.settings_updates),
     Policy(R.string.settings_privacy_policy), Licences(R.string.settings_licences), Licence(R.string.settings_licences);
     val parent get() = when (this) {
         Language, Cleanup, CleanupModels -> Dictation
-        Layout, Theme, Learning, KeyboardHeight -> Keyboard
+        Layout, Theme, Learning, KeyboardHeight, SpaceSwipe -> Keyboard
         CustomTheme -> Theme
         Policy, Licences -> Privacy
         Licence -> Licences
@@ -74,7 +82,7 @@ private fun licenceFiles(context: Context) =
 internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: TypingPreferences,
                          phase: SpeechPhase, transcript: String, liveSpeech: LiveSpeech?, voiceLevel: FloatState,
                          notice: String?, dictate: () -> Unit, cancel: () -> Unit, clear: () -> Unit, setupPage: (Int) -> Unit,
-                         systemSettings: () -> Unit) {
+                         systemSettings: () -> Unit, updatesRequest: Int) {
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var licence by rememberSaveable { mutableStateOf("") }
     var practice by remember { mutableStateOf("") }
@@ -100,6 +108,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
     var confirmLearningReset by rememberSaveable { mutableStateOf(false) }
     val autoCapitalize = remember(revision) { typing.autoCapitalize }
     val autocorrect = remember(revision) { typing.autocorrect }
+    val spaceSwipeBehavior = remember(revision) { typing.spaceSwipeBehavior }
     val swearWords = remember(revision) { typing.suggestSwearWords }
     val spatial = remember(revision) { typing.spatial }
     val popups = remember(revision) { typing.popups }
@@ -114,6 +123,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
         if (next != Page.Learning) confirmLearningReset = false
         page = next
     }
+    LaunchedEffect(updatesRequest) { if (updatesRequest > 0) open(Page.Updates) }
     BackHandler(page != Page.Home) { open(page.parent) }
 
     Box(Modifier.fillMaxSize().background(voiceColorResource(R.color.page)).safeDrawingPadding(),
@@ -178,7 +188,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                         }
                         if (notice != null) Label(notice, muted = true, size = 14, lines = 3)
                         Card {
-                            listOf(Page.Dictation, Page.Keyboard, Page.Privacy).forEachIndexed { i, dest ->
+                            listOf(Page.Dictation, Page.Keyboard, Page.Updates, Page.Privacy).forEachIndexed { i, dest ->
                                 if (i != 0) Rule()
                                 Entry(stringResource(dest.title), action = { open(dest) })
                             }
@@ -233,6 +243,8 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                             Rule(); Toggle(stringResource(R.string.settings_auto_capitalisation), stringResource(R.string.settings_auto_capitalisation_detail),
                                 autoCapitalize) { typing.autoCapitalize = it }
                             Rule(); Toggle(stringResource(R.string.settings_autocorrect), stringResource(R.string.settings_autocorrect_detail), autocorrect) { typing.autocorrect = it }
+                            Rule(); Entry(stringResource(R.string.settings_space_cursor), stringResource(spaceSwipeBehavior.description),
+                                action = { open(Page.SpaceSwipe) })
                             // Shown under Autocorrect while it is on, as on iPhone (it was alone on an Experiments page, on by default).
                             if (autocorrect) { Rule(); Toggle(stringResource(R.string.settings_spatial), stringResource(R.string.settings_spatial_detail), spatial) { typing.spatial = it } }
                             Rule(); Toggle(stringResource(R.string.settings_swear_words), stringResource(R.string.settings_swear_words_detail), swearWords) { typing.suggestSwearWords = it }
@@ -272,6 +284,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                         }
                     }
                     Page.CleanupModels -> CleanupModelPicker(speech)
+                    Page.Updates -> UpdatesSettings(updatesRequest)
                     Page.Theme -> AndroidView(modifier = Modifier.fillMaxWidth(), factory = { host ->
                         themePicker(host, appearance) { theme ->
                             if (theme == VoiceTheme.Custom) open(Page.CustomTheme)
@@ -320,6 +333,14 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                             }
                         }
                     }
+                    Page.SpaceSwipe -> Card {
+                        SpaceSwipeBehavior.entries.forEachIndexed { index, behavior ->
+                            if (index != 0) Rule()
+                            Entry(stringResource(behavior.title), stringResource(behavior.description),
+                                value = if (behavior == spaceSwipeBehavior) "✓" else "",
+                                action = { typing.spaceSwipeBehavior = behavior; open(Page.Keyboard) })
+                        }
+                    }
                     Page.Language, Page.Layout -> Card {
                         val layout = page == Page.Layout
                         // Layouts and dictation languages are separate lists that happen to match today.
@@ -354,6 +375,20 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
             }
         }
     }
+}
+
+private val SpaceSwipeBehavior.title get() = when (this) {
+    SpaceSwipeBehavior.LanguageAndCursor -> R.string.space_swipe_mixed
+    SpaceSwipeBehavior.LanguageOnly -> R.string.space_swipe_language
+    SpaceSwipeBehavior.CursorOnly -> R.string.space_swipe_cursor
+    SpaceSwipeBehavior.Off -> R.string.space_swipe_off
+}
+
+private val SpaceSwipeBehavior.description get() = when (this) {
+    SpaceSwipeBehavior.LanguageAndCursor -> R.string.space_swipe_mixed_detail
+    SpaceSwipeBehavior.LanguageOnly -> R.string.space_swipe_language_detail
+    SpaceSwipeBehavior.CursorOnly -> R.string.space_swipe_cursor_detail
+    SpaceSwipeBehavior.Off -> R.string.space_swipe_off_detail
 }
 
 @Composable
@@ -474,6 +509,62 @@ private fun reflow(lines: List<String>) = buildString {
 }
 @Composable private fun Card(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(voiceColorResource(R.color.sheet)), content = content)
+}
+
+@Composable
+private fun UpdatesSettings(updatesRequest: Int) {
+    val context = LocalContext.current
+    val status by AppUpdates.status.collectAsState()
+    val version = remember(context) { AppUpdates.installedVersion(context) }
+    var automatic by remember { mutableStateOf(UpdateCheckJob.enabled(context)) }
+    var installerError by remember { mutableStateOf(false) }
+    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(updatesRequest) { AppUpdates.check(context) }
+
+    Card {
+        Entry(stringResource(R.string.update_current_version), note = version)
+        Rule()
+        Toggle(stringResource(R.string.update_automatic), stringResource(R.string.update_automatic_detail), automatic) { enabled ->
+            automatic = enabled
+            UpdateCheckJob.setEnabled(context, enabled)
+            if (enabled && Build.VERSION.SDK_INT >= 33 &&
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val release = status.release
+            val label = when (status.phase) {
+                AppUpdates.Phase.Idle -> stringResource(R.string.settings_updates)
+                AppUpdates.Phase.Checking -> stringResource(R.string.update_checking)
+                AppUpdates.Phase.Current -> stringResource(R.string.update_current)
+                AppUpdates.Phase.Available -> stringResource(R.string.update_available, release?.version.toString())
+                AppUpdates.Phase.Downloading -> stringResource(R.string.update_downloading, status.percent)
+                AppUpdates.Phase.Ready -> stringResource(R.string.update_ready, release?.version.toString())
+                AppUpdates.Phase.Failed -> stringResource(if (release == null) R.string.update_check_failed else R.string.update_download_failed)
+            }
+            Label(label, weight = FontWeight.SemiBold, lines = 2)
+            if (status.phase == AppUpdates.Phase.Downloading) LearningBar(status.percent / 100f)
+            if (installerError) Label(stringResource(R.string.update_installer_failed), muted = true, lines = 3)
+            if (status.phase !in setOf(AppUpdates.Phase.Checking, AppUpdates.Phase.Downloading)) {
+                if (release != null && status.phase == AppUpdates.Phase.Ready) {
+                    Label(stringResource(R.string.update_install_detail), muted = true, size = 14, lines = 3)
+                    Action(stringResource(R.string.update_install)) {
+                        installerError = false
+                        val intent = if (context.packageManager.canRequestPackageInstalls()) AppUpdates.installIntent(context)
+                        else Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+                        if (intent != null) installerError = runCatching { context.startActivity(intent) }.isFailure
+                    }
+                } else if (release != null) {
+                    val size = Formatter.formatShortFileSize(context, release.size)
+                    Action(stringResource(R.string.update_download, size)) { AppUpdates.download(context, release) }
+                }
+                Action(stringResource(R.string.update_check)) { installerError = false; AppUpdates.check(context) }
+            }
+        }
+    }
 }
 
 @Composable

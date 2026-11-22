@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Build the Russian vocabulary supplement from pinned GitHub word lists.
+"""Build the Russian swipe and tap vocabulary supplements from pinned word lists.
 
 Input: Koziev/NLP_Datasets WordformFrequencies term2freq.dat (UTF-8)
-and danakt/russian-words russian.txt (Windows-1251).
+and danakt/russian-words russian.txt (Windows-1251). The tap lists can also use
+a Hunspell dictionary to verify attested word forms.
 """
 import argparse
 from collections import Counter
@@ -10,6 +11,7 @@ import json
 import math
 from pathlib import Path
 import re
+import subprocess
 
 ASSETS = Path(__file__).resolve().parents[1] / "app/src/main/assets"
 RUSSIAN = re.compile(r"[а-яё]{2,32}\Z")
@@ -44,6 +46,28 @@ def candidate_rows(counts, dictionary, baseline, blocked, minimum, limit):
     return ranks
 
 
+def typing_rows(counts, dictionary, existing, blocked, spellchecked):
+    for word, count in sorted(counts.items()):
+        if word in existing or word in blocked or RESTRICTED_STEM.search(word):
+            continue
+        if not ((count >= 20 and word in dictionary) or word in spellchecked):
+            continue
+        yield f"{word}\n"
+
+
+def typing_candidates(counts, dictionary, spellchecked, existing, blocked):
+    peak = max(counts.values())
+    candidates = {}
+    for word, count in counts.most_common():
+        if count < 20 or len(candidates) == 110_000:
+            break
+        if word in existing or word in blocked or RESTRICTED_STEM.search(word):
+            continue
+        if word in spellchecked or (count >= 100 and word in dictionary):
+            candidates[word] = round(255 + math.log(count / peak) / .145)
+    return candidates
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("frequencies", type=Path)
@@ -51,6 +75,9 @@ def main():
     parser.add_argument("--minimum", type=int, default=100)
     parser.add_argument("--limit", type=int, default=48_000)
     parser.add_argument("--output", type=Path, default=ASSETS / "glide/ru-extra.tsv")
+    parser.add_argument("--valid-output", type=Path, help="Write attested forms that the tap decoder should recognise")
+    parser.add_argument("--typing-extra", type=Path, help="Write additional ranked forms for the tap model")
+    parser.add_argument("--hunspell", type=Path, help="Hunspell dictionary path without the .dic/.aff suffix")
     args = parser.parse_args()
 
     counts = Counter()
@@ -74,6 +101,24 @@ def main():
         for word in sorted(ranks, key=str.lower):
             output.write(f"{word}\t{ranks[word]}\n")
     print(f"Wrote {len(ranks):,} entries to {args.output}")
+    existing = baseline | {word.lower() for word in ranks}
+    spellchecked = set()
+    if args.hunspell:
+        # Only check forms observed in the independent frequency corpus.
+        words = "".join(f"{word}\n" for word, count in counts.items() if count >= 5 and word not in existing)
+        checked = subprocess.run(["hunspell", "-G", "-i", "UTF-8", "-d", str(args.hunspell.resolve())],
+                                 input=words, capture_output=True, text=True, encoding="utf-8", check=True)
+        spellchecked = set(checked.stdout.splitlines())
+    if args.typing_extra:
+        candidates = typing_candidates(counts, dictionary, spellchecked, existing, blocked)
+        args.typing_extra.write_text("".join(f"{word}\t{rank}\n" for word, rank in sorted(candidates.items())),
+                                     encoding="utf-8")
+        existing.update(candidates)
+        print(f"Wrote {len(candidates):,} correction candidates to {args.typing_extra}")
+    if args.valid_output:
+        rows = list(typing_rows(counts, dictionary, existing, blocked, spellchecked))
+        args.valid_output.write_text("".join(rows), encoding="utf-8")
+        print(f"Wrote {len(rows):,} recognised spellings to {args.valid_output}")
 
 
 if __name__ == "__main__":
