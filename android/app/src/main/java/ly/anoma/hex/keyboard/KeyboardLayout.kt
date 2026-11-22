@@ -111,12 +111,8 @@ internal object KeyboardMetrics {
     const val SPACE = 4.5f
     const val PERIOD = 1f
     const val ENTER = 1.5f
-    /** The emoji grid's cell, as Gboard's (a 45 dp row pitch, nine across in portrait). */
-    const val EMOJI_CELL = 45f
-    const val EMOJI_CELL_LANDSCAPE = 38f
-    /** The emoji picker's own category bar above the grid, and a category's title in it. */
-    const val EMOJI_HEADER = 42f
-    const val EMOJI_TITLE = 24f
+    /** Maximum emoji cell pitch in dp to limit scaling of the picker's glyph bitmaps. */
+    const val EMOJI_CELL = 36f
     /** Gboard's emoji panel stands this much taller than its keyboard (Pixel 8 emulator: 325 px). */
     const val EMOJI_GROW = 124f
 

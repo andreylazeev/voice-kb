@@ -41,6 +41,7 @@ import ly.anoma.hex.typing.KeyPoint
 import ly.anoma.hex.typing.KeyRect
 import ly.anoma.hex.typing.TypingWord
 import ly.anoma.hex.useInter
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /** The keys: three rows from the page's layout, then ?123, comma, language, space, period and enter. Every
@@ -282,9 +283,8 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                 row.layoutParams = row.layoutParams.apply { height = rowHeight + top }
             }
         }
-        if (emojiOpen) {
-            pickerSized += 3 * (rowHeight - previous)
-            picker?.let { it.layoutParams = it.layoutParams.apply { height = pickerSized } }
+        if (emojiOpen) picker?.let { p ->
+            p.layoutParams = p.layoutParams.apply { height += 3 * (rowHeight - previous) }
         }
         grid = null
         return true
@@ -563,7 +563,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         // Turned, the screen is short: the panel may take up to two thirds of it, with smaller cells.
         val share = if (landscape) 0.67f else 0.6f
         val grow = minOf(px(KeyboardMetrics.EMOJI_GROW), (resources.displayMetrics.heightPixels * share).toInt() - keyboard).coerceAtLeast(0)
-        val height = 3 * rowHeight + reach + extra + grow
+        val pickerHeight = 3 * rowHeight + reach + extra + grow
         val p = picker?.also { it.setRecentEmojiProvider(recents); it.post { it.toTop() } } ?: EmojiPickerView(ContextThemeWrapper(context, R.style.HexEmoji)).also { p ->
             p.setRecentEmojiProvider(recents)
             p.setOnEmojiPickedListener { item ->
@@ -571,18 +571,10 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                 if (vibrates(context, ime.feedback.haptics)) p.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 ime.engine.type(item.emoji)
             }
-            picker = p; addView(p, 0, LayoutParams(LayoutParams.MATCH_PARENT, height))
+            picker = p; addView(p, 0, LayoutParams(LayoutParams.MATCH_PARENT, pickerHeight))
         }
-        if (pickerSized != height) {
-            // Square cells about Gboard's size: nine across in portrait, more when turned. The picker sizes its rows
-            // from what its grid has left after two category titles.
-            val cell = if (landscape) KeyboardMetrics.EMOJI_CELL_LANDSCAPE else KeyboardMetrics.EMOJI_CELL
-            val columns = maxOf(9, (resources.displayMetrics.widthPixels / (cell * density)).toInt())
-            p.emojiGridColumns = columns
-            p.emojiGridRows = ((height - (KeyboardMetrics.EMOJI_HEADER + 2 * KeyboardMetrics.EMOJI_TITLE) * density) /
-                (resources.displayMetrics.widthPixels.toFloat() / columns)).coerceAtLeast(1f)
-            p.layoutParams.height = height; p.requestLayout(); pickerSized = height
-        }
+        sizeEmojiGrid(p)
+        if (p.layoutParams.height != pickerHeight) p.layoutParams = p.layoutParams.apply { height = pickerHeight }
         rows.visibility = GONE; bottom.visibility = GONE
         p.visibility = VISIBLE; emojiBottom.visibility = VISIBLE
         emojiOpen = true
@@ -595,7 +587,14 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         emojiOpen = false
     }
     private val recents by lazy { RecentEmoji(context) }
-    private var pickerSized = 0
+    private var pickerWidth = 0
+    private fun sizeEmojiGrid(picker: EmojiPickerView) {
+        if (width <= 0 || width == pickerWidth) return
+        pickerWidth = width
+        // AndroidX measures square cells when rows are unset and scales a fixed 30 sp bitmap.
+        // Limit the cell pitch to keep glyphs close to their rendered size on wide screens.
+        picker.emojiGridColumns = ceil(width / (KeyboardMetrics.EMOJI_CELL * density)).toInt()
+    }
     /** The picker back at Recently used: its tab for them (the icon's clickable item), tapped. */
     private fun EmojiPickerView.toTop() {
         val name = context.getString(R.string.emoji_category_recent)
@@ -870,6 +869,10 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         super.onLayout(changed, l, t, r, b)
         grid = null
+    }
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (emojiOpen && w != oldw) post { if (emojiOpen) picker?.let(::sizeEmojiGrid) }
     }
     fun clearCallout() {
         pendingHold?.let(::removeCallbacks); pendingHold = null; feedback.clear()
