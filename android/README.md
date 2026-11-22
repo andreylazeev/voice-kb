@@ -34,6 +34,16 @@ adb install -r /tmp/VoiceKB-arm64.apk
 
 Для обновления установленной версии используйте совместимую подпись. Android сохраняет данные при обновлении APK с тем же ключом или корректной цепочкой ротации. [Подпись APK и ротация ключей](https://developer.android.com/tools/apksigner)
 
+### Публикация через GitHub Actions
+
+Поменяйте `versionName` в формате `X.Y.Z` и увеличьте `versionCode` в [`app/build.gradle.kts`](app/build.gradle.kts). После отправки изменений в `main` откройте **Actions → Android Release → Run workflow** и выберите `main`. Можно запустить и из терминала.
+
+```sh
+gh workflow run release.yml --ref main
+```
+
+Workflow берёт версию из коммита запуска. Если релиз с тегом `vX.Y.Z` уже есть, workflow пропускает сборку. Для новой версии он запускает тесты, подписывает APK ключом из GitHub Actions Secrets и публикует APK и `SHA256SUMS.txt`.
+
 ## Структура
 
 - `app/src/main/java/ly/anoma/hex/keyboard` — IME, режимы Fold, ввод и управление жестами.
